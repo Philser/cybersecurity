@@ -18,7 +18,7 @@ def main(ip, port, payload, max, timeout):
             s = socket.create_connection((ip, port))
             s.recv(1024)
             print("Fuzzing with %s bytes" % len(buffer))
-            string = payload + ' ' + buffer + "\r\n"
+            string = payload + ' ' + string + "\r\n"
             s.send(string.encode())
             s.recv(1024)
             s.close()
