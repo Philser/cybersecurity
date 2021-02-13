@@ -25,4 +25,16 @@ The session is very unstable.
 
 Yep :) 
 
-- winPEAS and PowerUp do not work ---> Manual enumeration?
+## Windows Post Exploitation
+#### Automatic enumeration 
+- winPEAS and PowerUp do not work
+
+#### Vulnerable Service Paths
+- Get all services and their paths  
+ `$service = get-wmiobject -query 'select * from win32_service'; echo $service.pathname`
+- Interesting path:   
+`"C:\Program Files\MySQL\MySQL Server 5.1\bin\mysqld" --defaults-file="C:\Program Files\MySQL\MySQL Server 5.1\my.ini" MySQL"` 
+- No write access
+
+#### Abuse privileges  
+- No abusable privileges
