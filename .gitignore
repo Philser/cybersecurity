@@ -1,4 +1,4 @@
-.exe
-.aspx
-.txt
-.dic
+*.exe
+*.aspx
+*.txt
+*.dic
