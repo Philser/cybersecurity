@@ -1,0 +1,1 @@
+Tools I'll be writing along the way for recurring problems. These tools will probably be and stay hacky & dirty
