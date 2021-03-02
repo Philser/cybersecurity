@@ -2,3 +2,8 @@
 *.aspx
 *.txt
 *.dic
+*.php
+*.nmap
+*.dll
+*.xml
+*.key
