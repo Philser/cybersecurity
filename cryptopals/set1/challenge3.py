@@ -8,7 +8,7 @@ def challenge3():
     scores = []
     for character in range(65, 91):  # ASCII codes for A..Z
         output = cipher_lib.decipher_single_byte_xor(raw_bytes, character)
-        scores.append((cipher_lib.calculate_chi_squared(output.upper()),
+        scores.append((cipher_lib.score_plaintext(output.upper()),
                        chr(character), output))
 
     scores.sort()

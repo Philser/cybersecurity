@@ -10,7 +10,7 @@ with open("./challenge4.txt") as f:
             for character in range(32, 123):  # ASCII codes for A..Z
                 output = cipher_lib.decipher_single_byte_xor(
                     raw_bytes, character)
-                score = cipher_lib.calculate_chi_squared(output.upper())
+                score = cipher_lib.score_plaintext(output.upper())
                 scores_local.append((score, chr(character), output))
 
             scores_local.sort()

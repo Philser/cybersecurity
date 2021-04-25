@@ -1,3 +1,16 @@
+def __get_frequency_distribution__(str):
+    character_frequency = {}
+
+    for character in str:
+        upperCase = character.upper()
+        if character in character_frequency:
+            character_frequency[upperCase] += 1
+        else:
+            character_frequency[upperCase] = 1
+
+    return character_frequency
+
+
 def decipher_single_byte_xor(cipher, key):
     output = ""
     for byte_index in range(0, len(cipher)):
@@ -16,7 +29,7 @@ def decipher_single_byte_xor(cipher, key):
 # https://www3.nd.edu/~busiforc/handouts/cryptography/letterfrequencies.html
 
 
-def calculate_chi_squared(str):
+def score_plaintext(str):
     english_frequency_percent = {
         'E': 11.1607, 'A': 8.4966, 'R': 7.5809,
         'I': 7.5448, 'O': 7.1635, 'T': 6.9509,
@@ -29,7 +42,7 @@ def calculate_chi_squared(str):
         'Q': 0.1962, 'D': 3.3844
     }
 
-    distr = get_frequency_distribution(str)
+    distr = __get_frequency_distribution__(str)
 
     non_printable_characters = 0
     special_characters = 0
@@ -63,14 +76,14 @@ def calculate_chi_squared(str):
     return chi_squared
 
 
-def get_frequency_distribution(str):
-    character_frequency = {}
+def encrypt_repeating_key_xor(plaintext, key):
+    plaintext_bytes = str.encode(plaintext)
+    key_bytes = str.encode(key)
 
-    for character in str:
-        upperCase = character.upper()
-        if character in character_frequency:
-            character_frequency[upperCase] += 1
-        else:
-            character_frequency[upperCase] = 1
+    cipher = b""
+    for pos in range(0, len(plaintext_bytes)):
+        xord = plaintext_bytes[pos] ^ key_bytes[pos % len(key_bytes)]
+        cipher += xord.to_bytes(
+            1, byteorder='big')
 
-    return character_frequency
+    return cipher.hex()
