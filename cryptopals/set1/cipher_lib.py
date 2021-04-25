@@ -31,6 +31,8 @@ def calculate_chi_squared(str):
 
     distr = get_frequency_distribution(str)
 
+    non_printable_characters = 0
+    special_characters = 0
     chi_squared = 0.0
     for character in distr:
         observed = distr[character]
@@ -39,16 +41,22 @@ def calculate_chi_squared(str):
         else:
             if (ord(character) < 32 or ord(character) > 126):
                 # Character is not printable
-                # Therefore, let it become very unlikely for this to
-                # be English
-                expected = 0.01
+                # The more of those we find, the more unlikely it is to be
+                # English
+                # (0.1 is just a heuristic I found by playing around)
+                non_printable_characters += 1
+                expected = 0.1 / non_printable_characters
             else:
-                # If printable character, give it some weight
-                # This is to rate strings with a lot of special chars as more
-                # unlikely to be English.
-                # I just played around here until I found a value I deemed
-                # acceptable.
-                expected = 3
+                if (ord(character) == 32):
+                    # Ignore spaces to not punish actual english sentences
+                    # with lots of short words separated by spaces
+                    continue
+                # Character is printable but not a letter or number
+                # Do not treat it as harshly as unprintable characters
+                # but still punish a high frequency of special characters
+                # (1 is just a heuristic I found by playing around)
+                special_characters += 1
+                expected = 1 / special_characters
         s = observed - expected
         chi_squared += s ** 2 / expected
 
