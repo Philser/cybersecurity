@@ -89,11 +89,9 @@ def encrypt_repeating_key_xor(plaintext, key):
     return cipher.hex()
 
 
-def get_hamming_distance(str1, str2):
-    if len(str1) != len(str2):
-        raise ValueError("Strings are not the same length!")
-    bytes1 = str.encode(str1)
-    bytes2 = str.encode(str2)
+def get_hamming_distance(bytes1, bytes2):
+    if len(bytes1) != len(bytes2):
+        raise ValueError("Byte arrays are not the same length!")
 
     distance = 0
     for pos in range(0, len(bytes1)):
