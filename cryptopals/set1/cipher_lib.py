@@ -101,3 +101,96 @@ def get_hamming_distance(bytes1, bytes2):
             distance += b1 ^ b2
 
     return distance
+
+
+def guess_keysize(cipher: bytes) -> int:
+    distances = []
+    for keysize_guess in range(2, 41):
+        distance = 0
+        # Average it for better results
+        offset = 0
+        i = 0
+        while offset < len(cipher):
+            bytes1 = cipher[offset: offset + keysize_guess]
+            bytes2 = cipher[offset + keysize_guess: offset + keysize_guess * 2]
+            if (len(bytes1) != len(bytes2)):
+                # reached end, ignore last dangling bytes for now
+                break
+            dist = get_hamming_distance(
+                bytes1,
+                bytes2
+            )
+            distance += dist / keysize_guess  # normalize
+            i += 1
+            offset = keysize_guess * i * 2
+
+        average = distance / i
+        distances.append((keysize_guess, average))
+
+    distances.sort(key=lambda distance: distance[1])
+
+    # We only care for the keysize with the lowest distance
+    return distances[0][0]
+
+
+def slice_by_keysize(cipher: bytes, key_size: int) -> list:
+    cipher_blocks = []
+    offset = 0
+    i = 0
+    while offset < len(cipher):
+        cipher_blocks.append(cipher[offset: offset + key_size])
+        i += 1
+        offset = key_size * i
+    return cipher_blocks
+
+
+def transpose_blocks(cipher_blocks: list, key_size: int):
+    transposed = []
+    for i in range(0, key_size):
+        transposed.append(b"")
+        for j in range(0, len(cipher_blocks) - 1):
+            transposed[i] += cipher_blocks[j][i].to_bytes(
+                1, byteorder='big')
+
+    # We handle the last block seperately, because it might not be
+    # of length key_size
+    last_block = cipher_blocks[len(cipher_blocks) - 1]
+    for i in range(0, len(last_block)):
+        transposed[i] += last_block[i].to_bytes(1, byteorder='big')
+
+    return transposed
+
+
+def decrypt_repeating_key_xor(cipher: bytes, key: str):
+    spread_key = ""
+    for i in range(0, len(cipher)):
+        spread_key += key[i % len(key)]
+
+    cleartext = ""
+    for index in range(0, len(cipher)):
+        deciphered = cipher[index] ^ spread_key.encode('ascii')[index]
+        cleartext += deciphered.to_bytes(
+            1, byteorder='big').decode('ascii')
+
+    return cleartext
+
+
+def bruteforce_repeating_key_xor(cipher: bytes) -> (str, str):
+    key_size = guess_keysize(cipher)
+
+    cipher_blocks = slice_by_keysize(cipher, key_size)
+
+    transposed = transpose_blocks(cipher_blocks, key_size)
+
+    key = ""
+
+    for block in transposed:
+        block_scores = []
+        for character in range(32, 123):
+            output = decipher_single_byte_xor(block, character)
+            score = score_plaintext(output.upper())
+            block_scores.append((score, chr(character), output))
+        block_scores.sort()
+        key += block_scores[0][1]
+
+    return (key, decrypt_repeating_key_xor(cipher, key))
