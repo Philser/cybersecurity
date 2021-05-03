@@ -1,6 +1,8 @@
-
 import base64
-import cipher_lib
+import importlib.util
+spec = importlib.util.spec_from_file_location("cipher_lib", "../lib/cipher_lib.py")
+cipher_lib = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(cipher_lib)
 
 
 def b64decode_from_file(file) -> bytes:
