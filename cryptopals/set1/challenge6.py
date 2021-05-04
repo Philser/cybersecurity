@@ -1,6 +1,7 @@
 import base64
 import importlib.util
-spec = importlib.util.spec_from_file_location("cipher_lib", "../lib/cipher_lib.py")
+spec = importlib.util.spec_from_file_location(
+    "cipher_lib", "../lib/cipher_lib.py")
 cipher_lib = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cipher_lib)
 
@@ -15,7 +16,7 @@ def b64decode_from_file(file) -> bytes:
         return cipher
 
 
-cipher = b64decode_from_file("./challenge6.txt")
+cipher = b64decode_from_file("./challenge6.enc")
 
 
 (key, cleartext) = cipher_lib.bruteforce_repeating_key_xor(cipher)

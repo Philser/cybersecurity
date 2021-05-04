@@ -1,10 +1,11 @@
 import importlib.util
-spec = importlib.util.spec_from_file_location("cipher_lib", "../lib/cipher_lib.py")
+spec = importlib.util.spec_from_file_location(
+    "cipher_lib", "../lib/cipher_lib.py")
 cipher_lib = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cipher_lib)
 
 
-with open("./challenge4.txt") as f:
+with open("./challenge4.enc") as f:
     scores_global = []
     for string in f.readlines():
         raw_bytes = bytes.fromhex(string.strip('\n'))
