@@ -1,5 +1,3 @@
-from Crypto.Cipher import AES
-
 def __get_frequency_distribution__(str):
     character_frequency = {}
 
@@ -197,21 +195,13 @@ def bruteforce_repeating_key_xor(cipher: bytes) -> (str, str):
 
     return (key, decrypt_repeating_key_xor(cipher, key))
 
+
 def pad_pkcs7(text: str, block_size: int) -> str:
     if block_size < len(text):
         raise ValueError("Block size is smaller than given block")
 
     padding = block_size - len(text)
-    if  padding == 0:
+    if padding == 0:
         return text
-     
+
     return text + chr(padding) * padding
-
-
-def encrypt_aes_cbc(plaintext: str, key: str, iv: bytes) -> bytes:
-    block_size = 16 # AES operates on 16 bytes
-    suite = AES.new(key, AES.MODE_ECB)
-    # first_block = 
-    
-
-    
