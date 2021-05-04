@@ -1,3 +1,6 @@
+from Crypto.Cipher import AES
+
+
 def __get_frequency_distribution__(str):
     character_frequency = {}
 
@@ -76,17 +79,14 @@ def score_plaintext(str):
     return chi_squared
 
 
-def encrypt_repeating_key_xor(plaintext, key):
-    plaintext_bytes = str.encode(plaintext)
-    key_bytes = str.encode(key)
-
+def encrypt_repeating_key_xor(plaintext: bytes, key: bytes):
     cipher = b""
-    for pos in range(0, len(plaintext_bytes)):
-        xord = plaintext_bytes[pos] ^ key_bytes[pos % len(key_bytes)]
+    for pos in range(0, len(plaintext)):
+        xord = plaintext[pos] ^ key[pos % len(key)]
         cipher += xord.to_bytes(
             1, byteorder='big')
 
-    return cipher.hex()
+    return cipher
 
 
 def get_hamming_distance(bytes1, bytes2):
@@ -161,16 +161,16 @@ def transpose_blocks(cipher_blocks: list, key_size: int):
     return transposed
 
 
-def decrypt_repeating_key_xor(cipher: bytes, key: str):
-    spread_key = ""
+def decrypt_repeating_key_xor(cipher: bytes, key: bytes):
+    spread_key = b""
     for i in range(0, len(cipher)):
-        spread_key += key[i % len(key)]
+        spread_key += key[i % len(key)].to_bytes(1, byteorder='big')
 
-    cleartext = ""
+    cleartext = b""
     for index in range(0, len(cipher)):
-        deciphered = cipher[index] ^ spread_key.encode('ascii')[index]
+        deciphered = cipher[index] ^ spread_key[index]
         cleartext += deciphered.to_bytes(
-            1, byteorder='big').decode('ascii')
+            1, byteorder='big')
 
     return cleartext
 
@@ -197,11 +197,31 @@ def bruteforce_repeating_key_xor(cipher: bytes) -> (str, str):
 
 
 def pad_pkcs7(text: str, block_size: int) -> str:
-    if block_size < len(text):
-        raise ValueError("Block size is smaller than given block")
-
-    padding = block_size - len(text)
-    if padding == 0:
+    if len(text) % block_size == 0:
         return text
 
+    padding = block_size - (len(text) % block_size)
+
     return text + chr(padding) * padding
+
+
+def decrypt_aes_cbc(cipher: bytes, iv: bytes, key: bytes):
+    suite = AES.new(key, AES.MODE_ECB)
+
+    block_size = 16
+    offset = len(cipher)
+    plain = b""
+    previous_block = b""
+    for i in range(len(cipher) // block_size, 1, -1):
+        previous_block = cipher[offset - block_size * 2: offset - block_size]
+        block = cipher[offset - block_size: offset]
+        intermediate = suite.decrypt(block)
+        plain = decrypt_repeating_key_xor(intermediate, previous_block) + plain
+
+        offset -= block_size
+
+    first_block = cipher[0:block_size]
+    intermediate = suite.decrypt(first_block)
+    plain = decrypt_repeating_key_xor(intermediate, iv) + plain
+
+    return plain
