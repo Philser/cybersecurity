@@ -196,11 +196,11 @@ def bruteforce_repeating_key_xor(cipher: bytes) -> (str, str):
     return (key, decrypt_repeating_key_xor(cipher, key))
 
 
-def pad_pkcs7(text: str, block_size: int) -> str:
-    if len(text) % block_size == 0:
+def pad_pkcs7(text: str) -> str:
+    if len(text) % AES.block_size == 0:
         return text
 
-    padding = block_size - (len(text) % block_size)
+    padding = AES.block_size - (len(text) % AES.block_size)
 
     return text + chr(padding) * padding
 
@@ -208,20 +208,18 @@ def pad_pkcs7(text: str, block_size: int) -> str:
 def decrypt_aes_cbc(cipher: bytes, iv: bytes, key: bytes):
     suite = AES.new(key, AES.MODE_ECB)
 
-    block_size = 16
-    offset = len(cipher)
+    if len(cipher) % AES.block_size != 0:
+        raise ValueError("Cipher length needs to be a multiple of 16")
+
+    offset = 0
     plain = b""
-    previous_block = b""
-    for i in range(len(cipher) // block_size, 1, -1):
-        previous_block = cipher[offset - block_size * 2: offset - block_size]
-        block = cipher[offset - block_size: offset]
-        intermediate = suite.decrypt(block)
-        plain = decrypt_repeating_key_xor(intermediate, previous_block) + plain
+    previous_block = iv
+    for i in range(0, len(cipher) // AES.block_size):
+        offset = i * AES.block_size
+        curr_block = cipher[offset: offset + AES.block_size]
+        intermediate = suite.decrypt(curr_block)
+        plain += decrypt_repeating_key_xor(intermediate, previous_block)
 
-        offset -= block_size
-
-    first_block = cipher[0:block_size]
-    intermediate = suite.decrypt(first_block)
-    plain = decrypt_repeating_key_xor(intermediate, iv) + plain
+        previous_block = curr_block
 
     return plain

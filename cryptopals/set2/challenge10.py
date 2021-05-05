@@ -1,4 +1,5 @@
 from Crypto.Cipher import AES
+import base64
 import importlib.util
 spec = importlib.util.spec_from_file_location(
     "cipher_lib", "../lib/cipher_lib.py")
@@ -7,10 +8,7 @@ spec.loader.exec_module(cipher_lib)
 
 with open("./challenge10.enc") as f:
     key = b"YELLOW SUBMARINE"
-    block_size = 16
-    iv = "\x00" * 16
+    iv = b"\x00" * AES.block_size
 
-    text = f.read()
-    text = cipher_lib.pad_pkcs7(text, block_size)
-
-    print(cipher_lib.decrypt_aes_cbc(text.encode(), iv.encode(), key).decode())
+    text = base64.b64decode(f.read())
+    print(cipher_lib.decrypt_aes_cbc(text, iv, key).decode())
