@@ -1,29 +1,50 @@
+use openssl::symm::{encrypt, Cipher};
 use std::char;
 use std::error::Error;
 
-pub fn pad_pkcs7(text: &str, block_size: u32) -> Result<String, Box<dyn Error>> {
-    let padding = block_size - text.len() as u32;
-    if padding == 0 {
-        return Ok(text.to_string());
+pub fn pad_pkcs7(plaintext: Vec<u8>, block_size: usize) -> Result<Vec<u8>, Box<dyn Error>> {
+    if block_size > 128 {
+        return Err(Box::from("block sizes > 128 not supported"));
     }
 
-    let mut padded = text.to_string();
+    let modulo = plaintext.len() % block_size;
+    if modulo == 0 {
+        return Ok(plaintext);
+    }
+
+    let padding = block_size - modulo;
+    let character =
+        char::from_u32(padding as u32).ok_or("Error converting padding to character")?;
+    let intermediate = character.to_string();
+    let byte_char = intermediate.as_bytes();
+    let mut new = plaintext.clone();
     for _i in 0..padding {
-        padding.to_be_bytes();
-        padded += &char::from_digit(padding, 16).ok_or("AAAA")?.to_string()
+        new.push(byte_char[0]);
     }
 
-    return Ok(padded);
+    return Ok(new);
 }
 
-#[cfg(tests)]
-mod tests {
+#[test]
+fn can_pad() {
+    let mut expected = b"YELLOW SUBMARINE".to_vec();
 
-    #[test]
-    fn can_pad() -> Result<String, Box<dyn Error>> {
-        let expected = "YELLOW SUBMARINE\x04\x04\x04\x04";
-        let padded = pad_pkcs7("YELLOW SUBMARINE", 20)?;
+    match pad_pkcs7(b"YELLOW SUBMARINE".to_vec(), 16) {
+        Ok(padded) => assert_eq!(expected, padded),
+        Err(_) => assert!(false, "Test should not have failed"),
+    }
+    expected = b"YELLOW SUBMARINE\x04\x04\x04\x04".to_vec();
 
-        assert_eq!(expected, padded);
+    match pad_pkcs7(b"YELLOW SUBMARINE".to_vec(), 20) {
+        Ok(padded) => assert_eq!(expected, padded),
+        Err(_) => assert!(false, "Test should not have failed"),
+    }
+
+    expected = b"YELLOW SUBMARINE\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10"
+        .to_vec();
+
+    match pad_pkcs7(b"YELLOW SUBMARINE".to_vec(), 32) {
+        Ok(padded) => assert_eq!(expected, padded),
+        Err(_) => assert!(false, "Test should not have failed"),
     }
 }
