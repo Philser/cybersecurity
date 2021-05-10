@@ -1,5 +1,5 @@
 use hex;
-use openssl::symm::{encrypt, Cipher};
+use openssl::symm::{decrypt, encrypt, Cipher, Crypter, Mode};
 use std::char;
 use std::error::Error;
 use std::iter;
@@ -18,15 +18,15 @@ pub fn pad_pkcs7(plaintext: &Vec<u8>, block_size: usize) -> Result<Vec<u8>, Box<
         return Err(Box::from("block sizes > 128 not supported"));
     }
 
-    let modulo = plaintext.len() % block_size;
-    if modulo == 0 {
+    let rest = plaintext.len() % block_size;
+    if rest == 0 {
         return Ok(plaintext.clone());
     }
 
-    let padding = block_size - modulo;
+    let padding = block_size - rest;
     let byte_char = num_to_byte(padding as u8)?;
     let mut new = plaintext.clone();
-    for _i in 0..padding {
+    for _ in 0..padding {
         new.push(byte_char);
     }
 
@@ -47,31 +47,77 @@ pub fn encrypt_repeating_key_xor(
     return Ok(cipher.to_vec());
 }
 
+pub fn decrypt_repeating_key_xor(cipher: &Vec<u8>, key: &Vec<u8>) -> Vec<u8> {
+    let mut spread_key = b"".to_vec();
+    for i in 0..cipher.len() {
+        spread_key.push(key[i % key.len()]);
+    }
+
+    let mut cleartext = b"".to_vec();
+    for index in 0..cipher.len() {
+        let deciphered = cipher[index] ^ spread_key[index];
+        cleartext.push(deciphered);
+    }
+
+    return cleartext;
+}
+
 pub fn encrypt_aes_cbc(
     plaintext: &Vec<u8>,
-    iv: &Vec<u8>,
+    iv: Vec<u8>,
     key: &Vec<u8>,
 ) -> Result<Vec<u8>, Box<dyn Error>> {
     let suite = Cipher::aes_128_ecb();
 
     let padded = pad_pkcs7(plaintext, suite.block_size())?;
-
     let mut offset;
-    let mut cipher = b"".to_vec();
-    let mut previous_block = iv.clone();
+    let mut cipher = vec![0; padded.len() + suite.block_size()];
+    let mut previous_block = iv;
     let mut curr_block: Vec<u8>;
-    let key_clone = key.clone().into_boxed_slice();
+    let mut a = Crypter::new(suite, Mode::Encrypt, &key, None)?;
+    let mut bytes_written = 0;
     for i in 0..(padded.len() / suite.block_size()) {
         offset = i * suite.block_size();
         curr_block = padded[offset..offset + suite.block_size()].to_vec();
         let intermediate = encrypt_repeating_key_xor(&curr_block, &previous_block)?;
-        let mut encrypted = encrypt(suite, &key_clone, None, &intermediate.into_boxed_slice())?;
-        cipher.append(&mut encrypted);
+        bytes_written += a.update(&intermediate, &mut cipher[bytes_written..])?;
+
+        previous_block = curr_block.clone();
+    }
+    bytes_written += a.finalize(&mut cipher[bytes_written..])?;
+    cipher.truncate(bytes_written);
+    Ok(cipher)
+}
+
+pub fn decrypt_aes_cbc(
+    cipher: &Vec<u8>,
+    iv: Vec<u8>,
+    key: &Vec<u8>,
+) -> Result<Vec<u8>, Box<dyn Error>> {
+    let suite = Cipher::aes_128_ecb();
+    if cipher.len() % suite.block_size() != 0 {
+        return Err(Box::from(format!(
+            "Invalid cipher. Length is not a multiple of {}",
+            suite.block_size()
+        )));
+    }
+
+    let mut offset;
+    let mut plaintext = b"".to_vec();
+    let mut previous_block = iv;
+    let mut curr_block;
+    for i in 0..(cipher.len() / suite.block_size()) {
+        offset = i * suite.block_size();
+        curr_block = cipher[offset..offset + suite.block_size()].to_vec();
+        let mut intermediate = decrypt(suite, key, None, &curr_block)?;
+        intermediate.truncate(suite.block_size());
+        let mut decrypted = decrypt_repeating_key_xor(&intermediate, &previous_block);
+        plaintext.append(&mut decrypted);
 
         previous_block = curr_block.clone();
     }
 
-    Ok(cipher)
+    return Ok(plaintext);
 }
 
 #[test]
@@ -96,6 +142,13 @@ fn can_pad() {
         Ok(padded) => assert_eq!(expected, padded),
         Err(_) => assert!(false, "Test should not have failed"),
     }
+
+    expected = b"YELLOW SUBMARINE\x05\x05\x05\x05\x05".to_vec();
+
+    match pad_pkcs7(&b"YELLOW SUBMARINE".to_vec(), 7) {
+        Ok(padded) => assert_eq!(expected, padded),
+        Err(_) => assert!(false, "Test should not have failed"),
+    }
 }
 
 #[test]
@@ -114,20 +167,58 @@ fn can_encrypt_repeating_key_xor() {
                 .unwrap();
             assert_eq!(expected, result)
         }
-        Err(_) => assert!(false, "Function threw an error"),
+        Err(e) => assert!(false, "Function threw an error: {}", e),
     }
 }
 
 #[test]
+fn can_decrypt_repeating_key_xor() {
+    let expected = b"YELLOW SUBMARINE".to_vec();
+    let key = b"KEY".to_vec();
+
+    let encrypted = encrypt_repeating_key_xor(&expected, &key)
+        .map_err(|_| assert!(false, "Error encrypting plaintext"))
+        .unwrap();
+
+    let decrypted = decrypt_repeating_key_xor(&encrypted, &key);
+    assert_eq!(expected, decrypted);
+}
+
+#[test]
 fn can_encrypt_aes_cbc() {
-    let expected = b"jx`\x035\x85a\xab\x9b\xb5M\xd4\xcf\x80\xb8\xab".to_vec();
+    let suite = Cipher::aes_128_cbc();
+    let key = b"YELLOW SUBMARINE".to_vec();
     let mut iv = b"".to_vec();
     for _ in 0..16 {
         iv.append(&mut b"\x00".to_vec());
     }
+    let mut plaintext = b"test".to_vec();
 
-    match encrypt_aes_cbc(&b"test".to_vec(), &iv, &b"YELLOW SUBMARINE".to_vec()) {
+    let mut expected = encrypt(suite, &key, Some(&iv), &plaintext).unwrap();
+
+    // match encrypt_aes_cbc(&plaintext, iv.clone(), &key) {
+    //     Ok(encrypted) => {
+    //         assert!(
+    //             false,
+    //             "{:?}",
+    //             decrypt_aes_cbc(&encrypted, iv.clone(), &key).unwrap()
+    //         );
+    //         assert_eq!(expected, encrypted)
+    //     }
+    //     Err(_) => assert!(false, "Function threw error unexpectedly"),
+    // }
+
+    plaintext = b"Longer than 16 bytes".to_vec();
+
+    expected = encrypt(suite, &key, Some(&iv), &plaintext).unwrap();
+
+    match encrypt_aes_cbc(&plaintext, iv.clone(), &key) {
         Ok(encrypted) => {
+            assert!(
+                false,
+                "{:?}",
+                decrypt_aes_cbc(&encrypted, iv.clone(), &key).unwrap()
+            );
             assert_eq!(expected, encrypted)
         }
         Err(_) => assert!(false, "Function threw error unexpectedly"),
