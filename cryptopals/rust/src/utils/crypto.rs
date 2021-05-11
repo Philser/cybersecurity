@@ -5,14 +5,6 @@ use std::error::Error;
 use std::iter;
 use std::iter::FromIterator;
 
-fn num_to_byte(num: u8) -> Result<u8, Box<dyn Error>> {
-    let character = char::from_u32(num as u32).ok_or("Error converting padding to character")?;
-    let intermediate = character.to_string();
-    let byte_char = intermediate.as_bytes();
-
-    return Ok(byte_char[0]);
-}
-
 pub fn unpad_pkcs7(plaintext: &Vec<u8>, block_size: usize) -> Result<Vec<u8>, Box<dyn Error>> {
     if plaintext.len() % block_size != 0 {
         return Err(Box::from(format!(
@@ -40,10 +32,9 @@ pub fn pad_pkcs7(plaintext: &Vec<u8>, block_size: usize) -> Result<Vec<u8>, Box<
     }
 
     let padding = block_size - rest;
-    let byte_char = num_to_byte(padding as u8)?;
     let mut new = plaintext.clone();
     for _ in 0..padding {
-        new.push(byte_char);
+        new.push(padding as u8);
     }
 
     return Ok(new);
