@@ -62,6 +62,39 @@ pub fn decrypt_repeating_key_xor(cipher: &Vec<u8>, key: &Vec<u8>) -> Vec<u8> {
     return cleartext;
 }
 
+fn encrypt_aes_ebc_block(block: &Vec<u8>, key: &Vec<u8>) -> Result<Vec<u8>, Box<dyn Error>> {
+    return block_aes_ecb(block, key, Mode::Encrypt);
+}
+
+fn decrypt_aes_ebc_block(block: &Vec<u8>, key: &Vec<u8>) -> Result<Vec<u8>, Box<dyn Error>> {
+    return block_aes_ecb(block, key, Mode::Decrypt);
+}
+
+fn block_aes_ecb(block: &Vec<u8>, key: &Vec<u8>, mode: Mode) -> Result<Vec<u8>, Box<dyn Error>> {
+    let suite = Cipher::aes_128_ecb();
+
+    if block.len() != suite.block_size() {
+        return Err(Box::from(format!(
+            "Invalid block size, expected {} but was {}",
+            suite.block_size(),
+            block.len()
+        )));
+    }
+
+    let mut crypter = Crypter::new(suite, mode, key, None)?;
+    crypter.pad(false);
+
+    let mut result = vec![0; suite.block_size() * 2];
+
+    crypter.update(&block, &mut result)?;
+    crypter.finalize(&mut result)?;
+
+    // Throw away padding
+    result.truncate(suite.block_size());
+
+    return Ok(result);
+}
+
 pub fn encrypt_aes_cbc(
     plaintext: &Vec<u8>,
     iv: Vec<u8>,
@@ -71,21 +104,18 @@ pub fn encrypt_aes_cbc(
 
     let padded = pad_pkcs7(plaintext, suite.block_size())?;
     let mut offset;
-    let mut cipher = vec![0; padded.len() + suite.block_size()];
+    let mut cipher = b"".to_vec();
     let mut previous_block = iv;
     let mut curr_block: Vec<u8>;
-    let mut a = Crypter::new(suite, Mode::Encrypt, &key, None)?;
-    let mut bytes_written = 0;
     for i in 0..(padded.len() / suite.block_size()) {
         offset = i * suite.block_size();
         curr_block = padded[offset..offset + suite.block_size()].to_vec();
         let intermediate = encrypt_repeating_key_xor(&curr_block, &previous_block)?;
-        bytes_written += a.update(&intermediate, &mut cipher[bytes_written..])?;
+        let mut encrypted_block = encrypt_aes_ebc_block(&intermediate, &key)?;
 
-        previous_block = curr_block.clone();
+        previous_block = encrypted_block.clone();
+        cipher.append(&mut encrypted_block);
     }
-    bytes_written += a.finalize(&mut cipher[bytes_written..])?;
-    cipher.truncate(bytes_written);
     Ok(cipher)
 }
 
@@ -109,8 +139,7 @@ pub fn decrypt_aes_cbc(
     for i in 0..(cipher.len() / suite.block_size()) {
         offset = i * suite.block_size();
         curr_block = cipher[offset..offset + suite.block_size()].to_vec();
-        let mut intermediate = decrypt(suite, key, None, &curr_block)?;
-        intermediate.truncate(suite.block_size());
+        let intermediate = decrypt_aes_ebc_block(&curr_block, &key)?;
         let mut decrypted = decrypt_repeating_key_xor(&intermediate, &previous_block);
         plaintext.append(&mut decrypted);
 
@@ -185,6 +214,78 @@ fn can_decrypt_repeating_key_xor() {
 }
 
 #[test]
+fn can_encrypt_aes_ebc_block() {
+    let key = b"YELLOW SUBMARINE".to_vec();
+
+    let mut bytes = b"YELLOW SUBMARINE".to_vec();
+    let mut expected = b"\xd1\xaaOex\x92eB\xfb\xb6\xdd\x87l\xd2\x05\x08".to_vec();
+    match encrypt_aes_ebc_block(&bytes, &key) {
+        Ok(encrypted) => assert_eq!(expected, encrypted),
+        Err(e) => assert!(false, "Unexpected error: {}", e),
+    }
+
+    bytes = pad_pkcs7(&b"test".to_vec(), 16)
+        .map_err(|e| assert!(false, "Unexpected error while padding: {}", e))
+        .unwrap();
+    expected = b"jx`\x035\x85a\xab\x9b\xb5M\xd4\xcf\x80\xb8\xab".to_vec();
+    match encrypt_aes_ebc_block(&bytes, &key) {
+        Ok(encrypted) => assert_eq!(expected, encrypted),
+        Err(e) => assert!(false, "Unexpected error: {}", e),
+    }
+
+    match encrypt_aes_ebc_block(&b"unpadded".to_vec(), &key) {
+        Ok(_) => assert!(false, "Method should have thrown but didn't"),
+        Err(_) => assert!(true),
+    }
+}
+
+#[test]
+fn can_decrypt_aes_ebc_block() {
+    let key = b"YELLOW SUBMARINE".to_vec();
+
+    let mut bytes = b"\xd1\xaaOex\x92eB\xfb\xb6\xdd\x87l\xd2\x05\x08".to_vec();
+    let mut expected = b"YELLOW SUBMARINE".to_vec();
+    match decrypt_aes_ebc_block(&bytes, &key) {
+        Ok(decrypted) => assert_eq!(expected, decrypted),
+        Err(e) => assert!(false, "Unexpected error: {}", e),
+    }
+
+    bytes = b"jx`\x035\x85a\xab\x9b\xb5M\xd4\xcf\x80\xb8\xab".to_vec();
+    expected = b"test\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c".to_vec();
+    match decrypt_aes_ebc_block(&bytes, &key) {
+        Ok(decrypted) => assert_eq!(expected, decrypted),
+        Err(e) => assert!(false, "Unexpected error: {}", e),
+    }
+}
+
+#[test]
+fn can_decrypt_aes_cbc() {
+    let suite = Cipher::aes_128_cbc();
+    let key = b"YELLOW SUBMARINE".to_vec();
+    let mut iv = b"".to_vec();
+    for _ in 0..16 {
+        iv.append(&mut b"\x00".to_vec());
+    }
+
+    let mut plaintext = b"test".to_vec();
+    let mut encrypted = encrypt(suite, &key, Some(&iv), &plaintext).unwrap();
+    let mut expected = decrypt(suite, &key, Some(&iv), &encrypted).unwrap();
+
+    // match decrypt_aes_cbc(&encrypted, iv.clone(), &key) {
+    //     Ok(decrypted) => assert_eq!(expected, decrypted),
+    //     Err(e) => assert!(false, "Test failed with: {}", e),
+    // }
+
+    plaintext = b"YELLOW SUBMARINE".to_vec();
+    encrypted = encrypt(suite, &key, Some(&iv), &plaintext).unwrap();
+    expected = decrypt(suite, &key, Some(&iv), &encrypted).unwrap();
+    match decrypt_aes_cbc(&encrypted, iv.clone(), &key) {
+        Ok(decrypted) => assert_eq!(expected, decrypted),
+        Err(e) => assert!(false, "Test failed with: {}", e),
+    }
+}
+
+#[test]
 fn can_encrypt_aes_cbc() {
     let suite = Cipher::aes_128_cbc();
     let key = b"YELLOW SUBMARINE".to_vec();
@@ -192,34 +293,35 @@ fn can_encrypt_aes_cbc() {
     for _ in 0..16 {
         iv.append(&mut b"\x00".to_vec());
     }
+
     let mut plaintext = b"test".to_vec();
 
     let mut expected = encrypt(suite, &key, Some(&iv), &plaintext).unwrap();
 
-    // match encrypt_aes_cbc(&plaintext, iv.clone(), &key) {
-    //     Ok(encrypted) => {
-    //         assert!(
-    //             false,
-    //             "{:?}",
-    //             decrypt_aes_cbc(&encrypted, iv.clone(), &key).unwrap()
-    //         );
-    //         assert_eq!(expected, encrypted)
-    //     }
-    //     Err(_) => assert!(false, "Function threw error unexpectedly"),
-    // }
+    match encrypt_aes_cbc(&plaintext, iv.clone(), &key) {
+        Ok(encrypted) => {
+            assert_eq!(expected, encrypted)
+        }
+        Err(_) => assert!(false, "Function threw error unexpectedly"),
+    }
 
     plaintext = b"Longer than 16 bytes".to_vec();
 
     expected = encrypt(suite, &key, Some(&iv), &plaintext).unwrap();
-
+    let expected2=b"\xcb\x1e\x1c\x9f\x87\xb5\xa4\x9c\x9a\xddF\xda'\xd9\xae\xf5\xf2\x9d\x7f\xea\xf2n\xca\xc1x\x81\x1a\xe7\xd6\n\xd1!".to_vec();
     match encrypt_aes_cbc(&plaintext, iv.clone(), &key) {
         Ok(encrypted) => {
             assert!(
                 false,
                 "{:?}",
-                decrypt_aes_cbc(&encrypted, iv.clone(), &key).unwrap()
+                std::str::from_utf8(&decrypt_aes_cbc(&encrypted, iv.clone(), &key).unwrap())
             );
-            assert_eq!(expected, encrypted)
+            assert!(
+                false,
+                "{:?}",
+                hex::encode(decrypt(suite, &key, Some(&iv), &encrypted).unwrap())
+            );
+            assert_eq!(expected, expected2)
         }
         Err(_) => assert!(false, "Function threw error unexpectedly"),
     }
