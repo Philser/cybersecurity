@@ -13,6 +13,22 @@ fn num_to_byte(num: u8) -> Result<u8, Box<dyn Error>> {
     return Ok(byte_char[0]);
 }
 
+pub fn unpad_pkcs7(plaintext: &Vec<u8>, block_size: usize) -> Result<Vec<u8>, Box<dyn Error>> {
+    if plaintext.len() % block_size != 0 {
+        return Err(Box::from(format!(
+            "Plaintext not padded to multiple of block size {}",
+            block_size
+        )));
+    }
+
+    let padding = plaintext[plaintext.len() - 1] as u8;
+    println!("Padding: {:?}", padding);
+    let mut new = plaintext.clone();
+    new.truncate(plaintext.len() - padding as usize);
+
+    return Ok(new);
+}
+
 pub fn pad_pkcs7(plaintext: &Vec<u8>, block_size: usize) -> Result<Vec<u8>, Box<dyn Error>> {
     if block_size > 128 {
         return Err(Box::from("block sizes > 128 not supported"));
@@ -40,11 +56,10 @@ pub fn encrypt_repeating_key_xor(
     let mut cipher = vec![];
     for pos in 0..plaintext.len() {
         let xord: u8 = plaintext[pos] ^ key[pos % key.len()];
-        let byte_char = num_to_byte(xord)?;
-        cipher.push(byte_char);
+        cipher.push(xord);
     }
 
-    return Ok(cipher.to_vec());
+    return Ok(cipher);
 }
 
 pub fn decrypt_repeating_key_xor(cipher: &Vec<u8>, key: &Vec<u8>) -> Vec<u8> {
@@ -110,8 +125,15 @@ pub fn encrypt_aes_cbc(
     for i in 0..(padded.len() / suite.block_size()) {
         offset = i * suite.block_size();
         curr_block = padded[offset..offset + suite.block_size()].to_vec();
+        println!(
+            "XORing {:?} with {:?}",
+            hex::encode(&curr_block),
+            hex::encode(&previous_block)
+        );
         let intermediate = encrypt_repeating_key_xor(&curr_block, &previous_block)?;
+        println!("Intermediate result: {:?}", hex::encode(&intermediate));
         let mut encrypted_block = encrypt_aes_ebc_block(&intermediate, &key)?;
+        println!("Encrypted result: {:?}", hex::encode(&encrypted_block));
 
         previous_block = encrypted_block.clone();
         cipher.append(&mut encrypted_block);
@@ -123,6 +145,7 @@ pub fn decrypt_aes_cbc(
     cipher: &Vec<u8>,
     iv: Vec<u8>,
     key: &Vec<u8>,
+    unpad: bool,
 ) -> Result<Vec<u8>, Box<dyn Error>> {
     let suite = Cipher::aes_128_ecb();
     if cipher.len() % suite.block_size() != 0 {
@@ -144,6 +167,10 @@ pub fn decrypt_aes_cbc(
         plaintext.append(&mut decrypted);
 
         previous_block = curr_block.clone();
+    }
+
+    if unpad {
+        plaintext = unpad_pkcs7(&plaintext, suite.block_size())?;
     }
 
     return Ok(plaintext);
@@ -271,16 +298,16 @@ fn can_decrypt_aes_cbc() {
     let mut encrypted = encrypt(suite, &key, Some(&iv), &plaintext).unwrap();
     let mut expected = decrypt(suite, &key, Some(&iv), &encrypted).unwrap();
 
-    // match decrypt_aes_cbc(&encrypted, iv.clone(), &key) {
-    //     Ok(decrypted) => assert_eq!(expected, decrypted),
-    //     Err(e) => assert!(false, "Test failed with: {}", e),
-    // }
+    match decrypt_aes_cbc(&encrypted, iv.clone(), &key, true) {
+        Ok(decrypted) => assert_eq!(expected, decrypted),
+        Err(e) => assert!(false, "Test failed with: {}", e),
+    }
 
     plaintext = b"YELLOW SUBMARINE".to_vec();
     encrypted = encrypt(suite, &key, Some(&iv), &plaintext).unwrap();
     expected = decrypt(suite, &key, Some(&iv), &encrypted).unwrap();
-    match decrypt_aes_cbc(&encrypted, iv.clone(), &key) {
-        Ok(decrypted) => assert_eq!(expected, decrypted),
+    match decrypt_aes_cbc(&encrypted, iv.clone(), &key, true) {
+        Ok(decrypted) => assert_eq!(expected, decrypted,),
         Err(e) => assert!(false, "Test failed with: {}", e),
     }
 }
@@ -308,20 +335,10 @@ fn can_encrypt_aes_cbc() {
     plaintext = b"Longer than 16 bytes".to_vec();
 
     expected = encrypt(suite, &key, Some(&iv), &plaintext).unwrap();
-    let expected2=b"\xcb\x1e\x1c\x9f\x87\xb5\xa4\x9c\x9a\xddF\xda'\xd9\xae\xf5\xf2\x9d\x7f\xea\xf2n\xca\xc1x\x81\x1a\xe7\xd6\n\xd1!".to_vec();
+
     match encrypt_aes_cbc(&plaintext, iv.clone(), &key) {
         Ok(encrypted) => {
-            assert!(
-                false,
-                "{:?}",
-                std::str::from_utf8(&decrypt_aes_cbc(&encrypted, iv.clone(), &key).unwrap())
-            );
-            assert!(
-                false,
-                "{:?}",
-                hex::encode(decrypt(suite, &key, Some(&iv), &encrypted).unwrap())
-            );
-            assert_eq!(expected, expected2)
+            assert_eq!(expected, encrypted)
         }
         Err(_) => assert!(false, "Function threw error unexpectedly"),
     }
