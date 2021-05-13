@@ -18,7 +18,7 @@ pub fn unpad_pkcs7(plaintext: &[u8], block_size: usize) -> Result<Vec<u8>, Box<d
     let mut new = plaintext.to_vec();
     new.truncate(plaintext.len() - padding as usize);
 
-    return Ok(new);
+    Ok(new)
 }
 
 pub fn pad_pkcs7(plaintext: &[u8], block_size: usize) -> Result<Vec<u8>, Box<dyn Error>> {
@@ -98,6 +98,20 @@ fn block_aes_ecb(block: &[u8], key: &[u8], mode: Mode) -> Result<Vec<u8>, Box<dy
     Ok(result)
 }
 
+pub fn encrypt_aes_ecb(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+    let suite = Cipher::aes_128_ecb();
+    let padded = pad_pkcs7(&plaintext, suite.block_size())?;
+    let mut offset;
+    let mut cipher = vec![];
+    for i in 0..(padded.len() / suite.block_size()) {
+        offset = i * suite.block_size();
+        let block = padded[offset..offset + suite.block_size()].to_vec();
+        cipher.extend(encrypt_aes_ebc_block(&block, &key)?);
+    }
+
+    Ok(cipher)
+}
+
 pub fn encrypt_aes_cbc(
     plaintext: &[u8],
     iv: Vec<u8>,
@@ -157,7 +171,7 @@ pub fn decrypt_aes_cbc(
     Ok(plaintext)
 }
 
-pub fn generate_aes_128_key() -> Vec<u8> {
+fn generate_random_8_bytes() -> Vec<u8> {
     let mut rng = rand::thread_rng();
 
     (0..16)
@@ -166,6 +180,41 @@ pub fn generate_aes_128_key() -> Vec<u8> {
             byte
         })
         .collect()
+}
+
+pub fn aes_encryption_oracle(plaintext: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+    let key = generate_random_8_bytes();
+
+    let mut rng = rand::thread_rng();
+    let mut to_encrypt: Vec<u8> = (0..rng.gen_range(5..=10))
+        .map(|_| {
+            let byte: u8 = rng.gen();
+            byte
+        })
+        .collect();
+    let postfix: Vec<u8> = (0..rng.gen_range(5..=10))
+        .map(|_| {
+            let byte: u8 = rng.gen();
+            byte
+        })
+        .collect();
+
+    to_encrypt.extend(&plaintext.to_vec());
+    to_encrypt.extend(&postfix);
+
+    let cipher;
+    match rng.gen_range(0..=1) {
+        0 => {
+            let iv = generate_random_8_bytes();
+            cipher = encrypt_aes_cbc(&to_encrypt, iv, &key)?;
+        }
+        1 => cipher = encrypt_aes_ecb(&to_encrypt, &key)?,
+        _ => {
+            panic!("Good lord! The RNG produced a number other than 0 or 1!")
+        }
+    };
+
+    Ok(cipher)
 }
 
 #[test]
@@ -183,7 +232,8 @@ fn can_pad() {
         Err(_) => panic!("Test should not have failed"),
     }
 
-    expected = b"YELLOW SUBMARINE\x10\x10\x10\x10\x10\x10\x10\x10\x10\\x10\x10\x10\x10\x10\x10\x10"
+    expected = b"YELLOW SUBMARINE\x10\x10\x10\x10\x10\x10\x10\x10\x10\
+    \x10\x10\x10\x10\x10\x10\x10"
         .to_vec();
 
     match pad_pkcs7(&b"YELLOW SUBMARINE".to_vec(), 32) {
@@ -328,6 +378,34 @@ fn can_encrypt_aes_cbc() {
     expected = encrypt(suite, &key, Some(&iv), &plaintext).unwrap();
 
     match encrypt_aes_cbc(&plaintext, iv.clone(), &key) {
+        Ok(encrypted) => {
+            assert_eq!(expected, encrypted)
+        }
+        Err(_) => panic!("Function threw error unexpectedly"),
+    }
+}
+
+#[test]
+fn can_encrypt_aes_ebc() {
+    let suite = Cipher::aes_128_ecb();
+    let key = b"YELLOW SUBMARINE".to_vec();
+
+    let mut plaintext = b"test".to_vec();
+
+    let mut expected = encrypt(suite, &key, None, &plaintext).unwrap();
+
+    match encrypt_aes_ecb(&plaintext, &key) {
+        Ok(encrypted) => {
+            assert_eq!(expected, encrypted)
+        }
+        Err(_) => panic!("Function threw error unexpectedly"),
+    }
+
+    plaintext = b"Longer than 16 bytes".to_vec();
+
+    expected = encrypt(suite, &key, None, &plaintext).unwrap();
+
+    match encrypt_aes_ecb(&plaintext, &key) {
         Ok(encrypted) => {
             assert_eq!(expected, encrypted)
         }
