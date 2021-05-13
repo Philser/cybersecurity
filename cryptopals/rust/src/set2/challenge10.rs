@@ -1,5 +1,4 @@
 use crate::utils::crypto::decrypt_aes_cbc;
-use base64;
 use std::env;
 use std::error::Error;
 use std::fs::File;

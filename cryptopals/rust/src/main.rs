@@ -4,6 +4,7 @@ use std::io::{self, Read};
 
 fn main() {
     let mut input = String::new();
+    let stdin = io::stdin();
 
     loop {
         println!(
@@ -13,11 +14,12 @@ fn main() {
     "###
         );
 
-        io::stdin()
+        input.clear();
+        stdin
             .read_line(&mut input)
             .map_err(|_| "Whoops, something went wrong")
             .unwrap();
-        input = input.trim_end_matches("\n").to_string();
+        input = input.trim_end_matches('\n').to_string();
         match input.as_ref() {
             // TODO: BAAAAD, Figure out a way to streamline error handling
             "10" => set2::challenge10::run().unwrap(),
@@ -26,7 +28,7 @@ fn main() {
                 break;
             }
             _ => {
-                println!("Invalid option")
+                println!("Invalid option: {}", input)
             }
         }
     }

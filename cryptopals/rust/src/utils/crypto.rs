@@ -1,5 +1,6 @@
 use hex;
 use openssl::symm::{decrypt, encrypt, Cipher, Crypter, Mode};
+use rand::Rng;
 use std::char;
 use std::error::Error;
 use std::iter;
@@ -154,6 +155,17 @@ pub fn decrypt_aes_cbc(
     }
 
     Ok(plaintext)
+}
+
+pub fn generate_aes_128_key() -> Vec<u8> {
+    let mut rng = rand::thread_rng();
+
+    (0..16)
+        .map(|_| {
+            let byte: u8 = rng.gen();
+            byte
+        })
+        .collect()
 }
 
 #[test]
