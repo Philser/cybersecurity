@@ -7,14 +7,14 @@ use std::io::{prelude::*, BufReader};
 use std::str;
 
 pub fn run() -> Result<(), Box<dyn Error>> {
-    let cwd = env::current_dir()?;
-    println!("{}", cwd.as_path().display());
     let mut iv = b"".to_vec();
     for _ in 0..16 {
         iv.append(&mut b"\x00".to_vec());
     }
 
-    let file = File::open(cwd.join("src/set2/challenge10.enc"))?;
+    let path = env::current_dir()?.join("src/set2/challenge10.enc");
+    println!("Reading from file {}", path.display());
+    let file = File::open(path)?;
     let reader = BufReader::new(file);
     let mut contents = "".to_owned();
     for line in reader.lines() {

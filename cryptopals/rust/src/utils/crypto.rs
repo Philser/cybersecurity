@@ -5,7 +5,7 @@ use std::error::Error;
 use std::iter;
 use std::iter::FromIterator;
 
-pub fn unpad_pkcs7(plaintext: &Vec<u8>, block_size: usize) -> Result<Vec<u8>, Box<dyn Error>> {
+pub fn unpad_pkcs7(plaintext: &[u8], block_size: usize) -> Result<Vec<u8>, Box<dyn Error>> {
     if plaintext.len() % block_size != 0 {
         return Err(Box::from(format!(
             "Plaintext not padded to multiple of block size {}",
@@ -14,46 +14,42 @@ pub fn unpad_pkcs7(plaintext: &Vec<u8>, block_size: usize) -> Result<Vec<u8>, Bo
     }
 
     let padding = plaintext[plaintext.len() - 1] as u8;
-    println!("Padding: {:?}", padding);
-    let mut new = plaintext.clone();
+    let mut new = plaintext.to_vec();
     new.truncate(plaintext.len() - padding as usize);
 
     return Ok(new);
 }
 
-pub fn pad_pkcs7(plaintext: &Vec<u8>, block_size: usize) -> Result<Vec<u8>, Box<dyn Error>> {
+pub fn pad_pkcs7(plaintext: &[u8], block_size: usize) -> Result<Vec<u8>, Box<dyn Error>> {
     if block_size > 128 {
         return Err(Box::from("block sizes > 128 not supported"));
     }
 
     let rest = plaintext.len() % block_size;
     if rest == 0 {
-        return Ok(plaintext.clone());
+        return Ok(plaintext.to_vec());
     }
 
     let padding = block_size - rest;
-    let mut new = plaintext.clone();
+    let mut new = plaintext.to_vec();
     for _ in 0..padding {
         new.push(padding as u8);
     }
 
-    return Ok(new);
+    Ok(new)
 }
 
-pub fn encrypt_repeating_key_xor(
-    plaintext: &Vec<u8>,
-    key: &Vec<u8>,
-) -> Result<Vec<u8>, Box<dyn Error>> {
+pub fn encrypt_repeating_key_xor(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
     let mut cipher = vec![];
     for pos in 0..plaintext.len() {
         let xord: u8 = plaintext[pos] ^ key[pos % key.len()];
         cipher.push(xord);
     }
 
-    return Ok(cipher);
+    Ok(cipher)
 }
 
-pub fn decrypt_repeating_key_xor(cipher: &Vec<u8>, key: &Vec<u8>) -> Vec<u8> {
+pub fn decrypt_repeating_key_xor(cipher: &[u8], key: &[u8]) -> Vec<u8> {
     let mut spread_key = b"".to_vec();
     for i in 0..cipher.len() {
         spread_key.push(key[i % key.len()]);
@@ -65,18 +61,18 @@ pub fn decrypt_repeating_key_xor(cipher: &Vec<u8>, key: &Vec<u8>) -> Vec<u8> {
         cleartext.push(deciphered);
     }
 
-    return cleartext;
+    cleartext
 }
 
-fn encrypt_aes_ebc_block(block: &Vec<u8>, key: &Vec<u8>) -> Result<Vec<u8>, Box<dyn Error>> {
-    return block_aes_ecb(block, key, Mode::Encrypt);
+fn encrypt_aes_ebc_block(block: &[u8], key: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+    block_aes_ecb(block, key, Mode::Encrypt)
 }
 
-fn decrypt_aes_ebc_block(block: &Vec<u8>, key: &Vec<u8>) -> Result<Vec<u8>, Box<dyn Error>> {
-    return block_aes_ecb(block, key, Mode::Decrypt);
+fn decrypt_aes_ebc_block(block: &[u8], key: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+    block_aes_ecb(block, key, Mode::Decrypt)
 }
 
-fn block_aes_ecb(block: &Vec<u8>, key: &Vec<u8>, mode: Mode) -> Result<Vec<u8>, Box<dyn Error>> {
+fn block_aes_ecb(block: &[u8], key: &[u8], mode: Mode) -> Result<Vec<u8>, Box<dyn Error>> {
     let suite = Cipher::aes_128_ecb();
 
     if block.len() != suite.block_size() {
@@ -98,13 +94,13 @@ fn block_aes_ecb(block: &Vec<u8>, key: &Vec<u8>, mode: Mode) -> Result<Vec<u8>, 
     // Throw away padding
     result.truncate(suite.block_size());
 
-    return Ok(result);
+    Ok(result)
 }
 
 pub fn encrypt_aes_cbc(
-    plaintext: &Vec<u8>,
+    plaintext: &[u8],
     iv: Vec<u8>,
-    key: &Vec<u8>,
+    key: &[u8],
 ) -> Result<Vec<u8>, Box<dyn Error>> {
     let suite = Cipher::aes_128_ecb();
 
@@ -116,15 +112,8 @@ pub fn encrypt_aes_cbc(
     for i in 0..(padded.len() / suite.block_size()) {
         offset = i * suite.block_size();
         curr_block = padded[offset..offset + suite.block_size()].to_vec();
-        println!(
-            "XORing {:?} with {:?}",
-            hex::encode(&curr_block),
-            hex::encode(&previous_block)
-        );
         let intermediate = encrypt_repeating_key_xor(&curr_block, &previous_block)?;
-        println!("Intermediate result: {:?}", hex::encode(&intermediate));
         let mut encrypted_block = encrypt_aes_ebc_block(&intermediate, &key)?;
-        println!("Encrypted result: {:?}", hex::encode(&encrypted_block));
 
         previous_block = encrypted_block.clone();
         cipher.append(&mut encrypted_block);
@@ -133,9 +122,9 @@ pub fn encrypt_aes_cbc(
 }
 
 pub fn decrypt_aes_cbc(
-    cipher: &Vec<u8>,
+    cipher: &[u8],
     iv: Vec<u8>,
-    key: &Vec<u8>,
+    key: &[u8],
     unpad: bool,
 ) -> Result<Vec<u8>, Box<dyn Error>> {
     let suite = Cipher::aes_128_ecb();
@@ -164,7 +153,7 @@ pub fn decrypt_aes_cbc(
         plaintext = unpad_pkcs7(&plaintext, suite.block_size())?;
     }
 
-    return Ok(plaintext);
+    Ok(plaintext)
 }
 
 #[test]
@@ -173,28 +162,28 @@ fn can_pad() {
 
     match pad_pkcs7(&b"YELLOW SUBMARINE".to_vec(), 16) {
         Ok(padded) => assert_eq!(expected, padded),
-        Err(_) => assert!(false, "Test should not have failed"),
+        Err(_) => panic!("Test should not have failed"),
     }
     expected = b"YELLOW SUBMARINE\x04\x04\x04\x04".to_vec();
 
     match pad_pkcs7(&b"YELLOW SUBMARINE".to_vec(), 20) {
         Ok(padded) => assert_eq!(expected, padded),
-        Err(_) => assert!(false, "Test should not have failed"),
+        Err(_) => panic!("Test should not have failed"),
     }
 
-    expected = b"YELLOW SUBMARINE\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10"
+    expected = b"YELLOW SUBMARINE\x10\x10\x10\x10\x10\x10\x10\x10\x10\\x10\x10\x10\x10\x10\x10\x10"
         .to_vec();
 
     match pad_pkcs7(&b"YELLOW SUBMARINE".to_vec(), 32) {
         Ok(padded) => assert_eq!(expected, padded),
-        Err(_) => assert!(false, "Test should not have failed"),
+        Err(_) => panic!("Test should not have failed"),
     }
 
     expected = b"YELLOW SUBMARINE\x05\x05\x05\x05\x05".to_vec();
 
     match pad_pkcs7(&b"YELLOW SUBMARINE".to_vec(), 7) {
         Ok(padded) => assert_eq!(expected, padded),
-        Err(_) => assert!(false, "Test should not have failed"),
+        Err(_) => panic!("Test should not have failed"),
     }
 }
 
@@ -210,11 +199,11 @@ fn can_encrypt_repeating_key_xor() {
     match encrypt_repeating_key_xor(&input, &b"ICE".to_vec()) {
         Ok(result) => {
             let expected = hex::decode(expected_hex)
-                .map_err(|_| assert!(false, "Error decoding expected hex string"))
+                .map_err(|_| panic!("Error decoding expected hex string"))
                 .unwrap();
             assert_eq!(expected, result)
         }
-        Err(e) => assert!(false, "Function threw an error: {}", e),
+        Err(e) => panic!("Function threw an error: {}", e),
     }
 }
 
@@ -224,7 +213,7 @@ fn can_decrypt_repeating_key_xor() {
     let key = b"KEY".to_vec();
 
     let encrypted = encrypt_repeating_key_xor(&expected, &key)
-        .map_err(|_| assert!(false, "Error encrypting plaintext"))
+        .map_err(|_| panic!("Error encrypting plaintext"))
         .unwrap();
 
     let decrypted = decrypt_repeating_key_xor(&encrypted, &key);
@@ -239,21 +228,20 @@ fn can_encrypt_aes_ebc_block() {
     let mut expected = b"\xd1\xaaOex\x92eB\xfb\xb6\xdd\x87l\xd2\x05\x08".to_vec();
     match encrypt_aes_ebc_block(&bytes, &key) {
         Ok(encrypted) => assert_eq!(expected, encrypted),
-        Err(e) => assert!(false, "Unexpected error: {}", e),
+        Err(e) => panic!("Unexpected error: {}", e),
     }
 
     bytes = pad_pkcs7(&b"test".to_vec(), 16)
-        .map_err(|e| assert!(false, "Unexpected error while padding: {}", e))
+        .map_err(|e| panic!("Unexpected error while padding: {}", e))
         .unwrap();
     expected = b"jx`\x035\x85a\xab\x9b\xb5M\xd4\xcf\x80\xb8\xab".to_vec();
     match encrypt_aes_ebc_block(&bytes, &key) {
         Ok(encrypted) => assert_eq!(expected, encrypted),
-        Err(e) => assert!(false, "Unexpected error: {}", e),
+        Err(e) => panic!("Unexpected error: {}", e),
     }
 
-    match encrypt_aes_ebc_block(&b"unpadded".to_vec(), &key) {
-        Ok(_) => assert!(false, "Method should have thrown but didn't"),
-        Err(_) => assert!(true),
+    if encrypt_aes_ebc_block(&b"unpadded".to_vec(), &key).is_ok() {
+        panic!("Method should have thrown but didn't")
     }
 }
 
@@ -265,14 +253,14 @@ fn can_decrypt_aes_ebc_block() {
     let mut expected = b"YELLOW SUBMARINE".to_vec();
     match decrypt_aes_ebc_block(&bytes, &key) {
         Ok(decrypted) => assert_eq!(expected, decrypted),
-        Err(e) => assert!(false, "Unexpected error: {}", e),
+        Err(e) => panic!("Unexpected error: {}", e),
     }
 
     bytes = b"jx`\x035\x85a\xab\x9b\xb5M\xd4\xcf\x80\xb8\xab".to_vec();
     expected = b"test\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c".to_vec();
     match decrypt_aes_ebc_block(&bytes, &key) {
         Ok(decrypted) => assert_eq!(expected, decrypted),
-        Err(e) => assert!(false, "Unexpected error: {}", e),
+        Err(e) => panic!("Unexpected error: {}", e),
     }
 }
 
@@ -291,7 +279,7 @@ fn can_decrypt_aes_cbc() {
 
     match decrypt_aes_cbc(&encrypted, iv.clone(), &key, true) {
         Ok(decrypted) => assert_eq!(expected, decrypted),
-        Err(e) => assert!(false, "Test failed with: {}", e),
+        Err(e) => panic!("Test failed with: {}", e),
     }
 
     plaintext = b"YELLOW SUBMARINE".to_vec();
@@ -299,7 +287,7 @@ fn can_decrypt_aes_cbc() {
     expected = decrypt(suite, &key, Some(&iv), &encrypted).unwrap();
     match decrypt_aes_cbc(&encrypted, iv.clone(), &key, true) {
         Ok(decrypted) => assert_eq!(expected, decrypted,),
-        Err(e) => assert!(false, "Test failed with: {}", e),
+        Err(e) => panic!("Test failed with: {}", e),
     }
 }
 
@@ -320,7 +308,7 @@ fn can_encrypt_aes_cbc() {
         Ok(encrypted) => {
             assert_eq!(expected, encrypted)
         }
-        Err(_) => assert!(false, "Function threw error unexpectedly"),
+        Err(_) => panic!("Function threw error unexpectedly"),
     }
 
     plaintext = b"Longer than 16 bytes".to_vec();
@@ -331,6 +319,6 @@ fn can_encrypt_aes_cbc() {
         Ok(encrypted) => {
             assert_eq!(expected, encrypted)
         }
-        Err(_) => assert!(false, "Function threw error unexpectedly"),
+        Err(_) => panic!("Function threw error unexpectedly"),
     }
 }
