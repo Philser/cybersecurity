@@ -20,6 +20,7 @@ fn main() {
             .read_line(&mut input)
             .map_err(|_| "Whoops, something went wrong")
             .unwrap();
+        println!("-----------------------------------------");
         input = input.trim_end_matches('\n').to_string();
         match input.as_ref() {
             // TODO: BAAAAD, Figure out a way to streamline error handling
@@ -33,5 +34,6 @@ fn main() {
                 println!("Invalid option: {}", input)
             }
         }
+        println!("-----------------------------------------");
     }
 }
