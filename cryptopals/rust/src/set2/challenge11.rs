@@ -1,4 +1,4 @@
-use crate::utils::oracle;
+use crate::utils::oracle::Oracle;
 use std::error::Error;
 
 pub fn run() -> Result<(), Box<dyn Error>> {
@@ -7,7 +7,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     let crafted_plaintext = b"YELLOW SUBMARINEYELLOW SUBMARINEYELLOW SUBMARINEYELLOW SUBMARINE\
         YELLOW SUBMARINEYELLOW SUBMARINE"
         .to_vec();
-    let (cipher, mode) = oracle::aes_encryption_oracle(&crafted_plaintext)?;
+    let (cipher, mode) = Oracle::aes_encryption_oracle(&crafted_plaintext)?;
     println!("Cipher:\n{:?}\n", cipher);
 
     // For now, let's use a very simple algorithm that takes a sequence from the beginning of the

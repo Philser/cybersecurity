@@ -11,6 +11,7 @@ fn main() {
             r###"Available challenges:
         (10) - Implement CBC Mode
         (11) - An ECB/CBC Detection Oracle
+        (12) - Byte-at-a-time ECB decryption (Simple)
         (q)  - Quit
     "###
         );
@@ -26,6 +27,7 @@ fn main() {
             // TODO: BAAAAD, Figure out a way to streamline error handling
             "10" => set2::challenge10::run().unwrap(),
             "11" => set2::challenge11::run().unwrap(),
+            "12" => set2::challenge12::run().unwrap(),
             "q" => {
                 println!("Goodbye");
                 break;

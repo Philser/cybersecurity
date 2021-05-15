@@ -1,6 +1,5 @@
 use hex;
 use openssl::symm::{decrypt, encrypt, Cipher, Crypter, Mode};
-
 use std::char;
 use std::error::Error;
 use std::iter;
