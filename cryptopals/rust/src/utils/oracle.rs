@@ -4,22 +4,34 @@ use std::error::Error;
 
 pub struct Oracle {
     key: Vec<u8>,
+    blackbox_plaintext: Vec<u8>,
 }
 
 impl Oracle {
-    pub fn new() -> Oracle {
-        Oracle {
-            key: Oracle::generate_random_byte_vec(16),
+    pub fn new(blackbox_b64string: Option<String>) -> Result<Oracle, Box<dyn Error>> {
+        let blackbox_string;
+
+        if blackbox_b64string.is_some() {
+            blackbox_string = base64::decode(blackbox_b64string.unwrap())?;
+        } else {
+            blackbox_string = base64::decode(
+                "Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkg\
+        aGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBq\
+        dXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUg\
+        YnkK",
+            )?;
         }
+
+        Ok(Oracle {
+            key: Oracle::generate_random_byte_vec(16),
+            blackbox_plaintext: blackbox_string,
+        })
     }
 
-    pub fn blackbox_encrypt_aes_ecb(&self, plaintext: &Vec<u8>) -> Result<Vec<u8>, Box<dyn Error>> {
-        let mut to_encrypt = plaintext.clone();
-        to_encrypt.extend(b"Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkg
-        aGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBq
-        dXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUg
-        YnkK"
-            .to_vec());
+    pub fn blackbox_encrypt_aes_ecb(&self, plaintext: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+        let mut to_encrypt = plaintext.to_vec();
+        let unknown_string = &self.blackbox_plaintext;
+        to_encrypt.extend(unknown_string);
 
         crypto::encrypt_aes_ecb(&to_encrypt, &self.key)
     }
