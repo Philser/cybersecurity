@@ -1,9 +1,5 @@
-use hex;
 use openssl::symm::{decrypt, encrypt, Cipher, Crypter, Mode};
-use std::char;
 use std::error::Error;
-use std::iter;
-use std::iter::FromIterator;
 
 pub fn unpad_pkcs7(plaintext: &[u8], block_size: usize) -> Result<Vec<u8>, Box<dyn Error>> {
     if plaintext.len() % block_size != 0 {
@@ -133,6 +129,31 @@ pub fn encrypt_aes_cbc(
         cipher.append(&mut encrypted_block);
     }
     Ok(cipher)
+}
+
+pub fn decrypt_aes_ebc(cipher: &[u8], key: &[u8], unpad: bool) -> Result<Vec<u8>, Box<dyn Error>> {
+    let suite = Cipher::aes_128_ecb();
+    if cipher.len() % suite.block_size() != 0 {
+        return Err(Box::from(format!(
+            "Invalid cipher. Length is not a multiple of {}",
+            suite.block_size()
+        )));
+    }
+
+    let mut curr_block;
+    let mut offset;
+    let mut plaintext = b"".to_vec();
+    for i in 0..(cipher.len() / suite.block_size()) {
+        offset = i * suite.block_size();
+        curr_block = cipher[offset..offset + suite.block_size()].to_vec();
+        plaintext.extend(decrypt_aes_ebc_block(&curr_block, &key)?);
+    }
+
+    if unpad {
+        plaintext = unpad_pkcs7(&plaintext, suite.block_size())?;
+    }
+
+    Ok(plaintext)
 }
 
 pub fn decrypt_aes_cbc(
@@ -361,6 +382,32 @@ fn can_encrypt_aes_ebc() {
     match encrypt_aes_ecb(&plaintext, &key) {
         Ok(encrypted) => {
             assert_eq!(expected, encrypted)
+        }
+        Err(_) => panic!("Function threw error unexpectedly"),
+    }
+}
+
+#[test]
+fn can_decrypt_aes_ebc() {
+    let suite = Cipher::aes_128_ecb();
+    let key = b"YELLOW SUBMARINE".to_vec();
+
+    let mut plaintext = b"test".to_vec();
+    let mut encrypted = encrypt(suite, &key, None, &plaintext).unwrap();
+
+    match decrypt_aes_ebc(&encrypted, &key, true) {
+        Ok(decrypted) => {
+            assert_eq!(plaintext, decrypted)
+        }
+        Err(_) => panic!("Function threw error unexpectedly"),
+    }
+
+    plaintext = b"testtesttesttesttesttesttesttest".to_vec(); // two blocks
+    encrypted = encrypt(suite, &key, None, &plaintext).unwrap();
+
+    match decrypt_aes_ebc(&encrypted, &key, true) {
+        Ok(decrypted) => {
+            assert_eq!(plaintext, decrypted)
         }
         Err(_) => panic!("Function threw error unexpectedly"),
     }

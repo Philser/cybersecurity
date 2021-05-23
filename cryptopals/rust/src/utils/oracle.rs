@@ -36,6 +36,10 @@ impl Oracle {
         crypto::encrypt_aes_ecb(&to_encrypt, &self.key)
     }
 
+    pub fn decrypt_aes_ecb(&self, cipher: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+        crypto::decrypt_aes_ebc(cipher, &self.key, true)
+    }
+
     /**
      * Static methods
      * */

@@ -50,9 +50,10 @@ pub fn decipher_oracle_secret(oracle: &Oracle) -> Result<Vec<u8>, Box<dyn Error>
             ) {
                 Ok(character) => secret.push(character),
                 Err(_) => {
-                    // For some reason it does not finish without error and I am too hungry and tired to
-                    // find out why. So let's just assume that if he cannot brute force the next char it
+                    // Let's just assume that if he cannot brute force the next char it
                     // is because he reached the end of the string.
+                    // TODO: We could also check if it is a padding char and only then stop, else
+                    // throw an error
                     break;
                 }
             }
