@@ -10,6 +10,12 @@ pub fn unpad_pkcs7(plaintext: &[u8], block_size: usize) -> Result<Vec<u8>, Box<d
     }
 
     let padding = plaintext[plaintext.len() - 1] as u8;
+
+    if (padding as usize) > block_size {
+        // Is not padded
+        return Ok(plaintext.to_vec());
+    }
+
     let mut new = plaintext.to_vec();
     new.truncate(plaintext.len() - padding as usize);
 
@@ -224,6 +230,34 @@ fn can_pad() {
 }
 
 #[test]
+fn can_unpad() {
+    let mut expected = b"YELLOW SUBMARINE".to_vec();
+
+    match unpad_pkcs7(&b"YELLOW SUBMARINE".to_vec(), 16) {
+        Ok(unpadded) => assert_eq!(expected, unpadded),
+        Err(_) => panic!("Test should not have failed"),
+    }
+
+    expected = b"YELLOW SUBMARIN".to_vec();
+
+    match unpad_pkcs7(&b"YELLOW SUBMARIN\x01".to_vec(), 16) {
+        Ok(unpadded) => assert_eq!(expected, unpadded),
+        Err(_) => panic!("Test should not have failed"),
+    }
+
+    expected = b"YELLOW SUBMARINE".to_vec();
+
+    match unpad_pkcs7(
+        &b"YELLOW SUBMARINE\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10\x10"
+            .to_vec(),
+        16,
+    ) {
+        Ok(unpadded) => assert_eq!(expected, unpadded),
+        Err(_) => panic!("Test should not have failed"),
+    }
+}
+
+#[test]
 fn can_encrypt_repeating_key_xor() {
     let expected_hex = "0b3637272a2b2e63622c2e69692a23693a2a3c6324202d623d63343c2a2\
     6226324272765272a282b2f20430a652e2c652a3124333a653e2b2027630c692b20283165286326302e27282f";
@@ -403,6 +437,16 @@ fn can_decrypt_aes_ebc() {
     }
 
     plaintext = b"testtesttesttesttesttesttesttest".to_vec(); // two blocks
+    encrypted = encrypt(suite, &key, None, &plaintext).unwrap();
+
+    match decrypt_aes_ebc(&encrypted, &key, true) {
+        Ok(decrypted) => {
+            assert_eq!(plaintext, decrypted)
+        }
+        Err(_) => panic!("Function threw error unexpectedly"),
+    }
+
+    plaintext = b"testtesttesttesttesttest".to_vec(); // one and a half blocks
     encrypted = encrypt(suite, &key, None, &plaintext).unwrap();
 
     match decrypt_aes_ebc(&encrypted, &key, true) {

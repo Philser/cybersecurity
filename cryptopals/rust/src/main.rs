@@ -12,6 +12,7 @@ fn main() {
         (10) - Implement CBC Mode
         (11) - An ECB/CBC Detection Oracle
         (12) - Byte-at-a-time ECB decryption (Simple)
+        (13) - ECB cut-and-paste
         (q)  - Quit
     "###
         );
@@ -28,6 +29,7 @@ fn main() {
             "10" => set2::challenge10::run().unwrap(),
             "11" => set2::challenge11::run().unwrap(),
             "12" => set2::challenge12::run().unwrap(),
+            "13" => set2::challenge13::run().unwrap(),
             "q" => {
                 println!("Goodbye");
                 break;

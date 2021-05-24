@@ -30,8 +30,7 @@ impl Oracle {
 
     pub fn blackbox_encrypt_aes_ecb(&self, plaintext: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
         let mut to_encrypt = plaintext.to_vec();
-        let unknown_string = &self.blackbox_plaintext;
-        to_encrypt.extend(unknown_string);
+        to_encrypt.extend(&self.blackbox_plaintext);
 
         crypto::encrypt_aes_ecb(&to_encrypt, &self.key)
     }
