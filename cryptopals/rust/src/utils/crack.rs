@@ -7,13 +7,13 @@ pub enum AesMode {
 }
 
 pub fn decipher_oracle_secret(oracle: &Oracle) -> Result<Vec<u8>, Box<dyn Error>> {
-    // 1.
+    // 1. Discover block size
     let block_size = discover_block_size(&oracle)?;
 
     let plaintext: Vec<u8> = (0..block_size*4).map(|_| 65/*"A"*/).collect();
     let cipher = oracle.blackbox_encrypt_aes_ecb(&plaintext)?;
 
-    // 2.
+    // 2. Detect cipher mode
     match detect_cipher_mode(&plaintext, &cipher, block_size)? {
         AesMode::Ecb => {/*let's continue*/},
         _ => return Err(Box::from("Error: Cipher is not in ECB mode"))
@@ -29,13 +29,13 @@ pub fn decipher_oracle_secret(oracle: &Oracle) -> Result<Vec<u8>, Box<dyn Error>
         let mut secret = b"".to_vec();
         
         for _ in 0..block_size  {
-            // 3.
+            // 3. Craft input block that is one byte short
             
             if !char_sequence.is_empty() {
                 char_sequence.remove(0); // Left shift by one at a time
             }
             let cipher = oracle.blackbox_encrypt_aes_ecb(&char_sequence)?;
-            // 4.
+
             let mut guess = char_sequence.clone();
             guess.extend(&secret);
 
@@ -43,6 +43,7 @@ pub fn decipher_oracle_secret(oracle: &Oracle) -> Result<Vec<u8>, Box<dyn Error>
                 return Ok(plaintext);
             }
 
+            // 4.-5. Brute force next byte by trying every possible byte and look for match
             match bruteforce_aes_ebc_byte(
                 &guess, 
                 &cipher[offset..offset + block_size], 

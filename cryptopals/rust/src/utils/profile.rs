@@ -1,15 +1,15 @@
 use crate::utils::oracle::Oracle;
 use std::error::Error;
-pub struct Profile {
+pub struct ProfileFactory {
     oracle: Oracle,
     uid_counter: usize,
 }
 
-impl Profile {
-    pub fn new() -> Result<Profile, Box<dyn Error>> {
+impl ProfileFactory {
+    pub fn new() -> Result<ProfileFactory, Box<dyn Error>> {
         let oracle = Oracle::new(Some("".to_owned()))?;
 
-        Ok(Profile {
+        Ok(ProfileFactory {
             oracle,
             uid_counter: 0,
         })
@@ -24,7 +24,6 @@ impl Profile {
             "email={}&uid={}&role=user",
             sanitized_email, self.uid_counter
         );
-
         self.uid_counter += 1;
 
         let encrypted = &self.oracle.blackbox_encrypt_aes_ecb(profile.as_bytes())?;
@@ -74,7 +73,7 @@ mod tests {
 
     #[test]
     fn can_fetch_role() -> Result<(), Box<dyn Error>> {
-        let mut profile = Profile::new()?;
+        let mut profile = ProfileFactory::new()?;
         let admin_profile = profile.profile_for_admin("test@test.com")?;
 
         let recovered_role = profile.fetch_role(&admin_profile)?;
