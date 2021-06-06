@@ -1,3 +1,8 @@
+from Crypto.Cipher import AES
+import secrets
+import random
+
+
 def __get_frequency_distribution__(str):
     character_frequency = {}
 
@@ -76,17 +81,14 @@ def score_plaintext(str):
     return chi_squared
 
 
-def encrypt_repeating_key_xor(plaintext, key):
-    plaintext_bytes = str.encode(plaintext)
-    key_bytes = str.encode(key)
-
+def encrypt_repeating_key_xor(plaintext: bytes, key: bytes):
     cipher = b""
-    for pos in range(0, len(plaintext_bytes)):
-        xord = plaintext_bytes[pos] ^ key_bytes[pos % len(key_bytes)]
+    for pos in range(0, len(plaintext)):
+        xord = plaintext[pos] ^ key[pos % len(key)]
         cipher += xord.to_bytes(
             1, byteorder='big')
 
-    return cipher.hex()
+    return cipher
 
 
 def get_hamming_distance(bytes1, bytes2):
@@ -161,16 +163,16 @@ def transpose_blocks(cipher_blocks: list, key_size: int):
     return transposed
 
 
-def decrypt_repeating_key_xor(cipher: bytes, key: str):
-    spread_key = ""
+def decrypt_repeating_key_xor(cipher: bytes, key: bytes):
+    spread_key = b""
     for i in range(0, len(cipher)):
-        spread_key += key[i % len(key)]
+        spread_key += key[i % len(key)].to_bytes(1, byteorder='big')
 
-    cleartext = ""
+    cleartext = b""
     for index in range(0, len(cipher)):
-        deciphered = cipher[index] ^ spread_key.encode('ascii')[index]
+        deciphered = cipher[index] ^ spread_key[index]
         cleartext += deciphered.to_bytes(
-            1, byteorder='big').decode('ascii')
+            1, byteorder='big')
 
     return cleartext
 
@@ -182,7 +184,7 @@ def bruteforce_repeating_key_xor(cipher: bytes) -> (str, str):
 
     transposed = transpose_blocks(cipher_blocks, key_size)
 
-    key = ""
+    key = b""
 
     for block in transposed:
         block_scores = []
@@ -191,17 +193,82 @@ def bruteforce_repeating_key_xor(cipher: bytes) -> (str, str):
             score = score_plaintext(output.upper())
             block_scores.append((score, chr(character), output))
         block_scores.sort()
-        key += block_scores[0][1]
+        key += block_scores[0][1].encode()
 
     return (key, decrypt_repeating_key_xor(cipher, key))
 
 
-def pad_pkcs7(text: str, block_size: int) -> str:
-    if block_size < len(text):
-        raise ValueError("Block size is smaller than given block")
+def pad_pkcs7(input: bytes, block_size: int) -> bytes:
+    if len(input) % block_size == 0:
+        return input
 
-    padding = block_size - len(text)
-    if padding == 0:
-        return text
+    padding = block_size - (len(input) % block_size)
 
-    return text + chr(padding) * padding
+    return input + chr(padding).encode() * padding
+
+
+def decrypt_aes_cbc(cipher: bytes, iv: bytes, key: bytes):
+    suite = AES.new(key, AES.MODE_ECB)
+
+    if len(cipher) % AES.block_size != 0:
+        raise ValueError("Cipher length needs to be a multiple of 16")
+
+    offset = 0
+    plain = b""
+    previous_block = iv
+    for i in range(0, len(cipher) // AES.block_size):
+        offset = i * AES.block_size
+        curr_block = cipher[offset: offset + AES.block_size]
+        intermediate = suite.decrypt(curr_block)
+        plain += decrypt_repeating_key_xor(intermediate, previous_block)
+
+        previous_block = curr_block
+
+    return plain
+
+
+def encrypt_aes_cbc(plaintext: bytes, iv: bytes, key: bytes):
+    suite = AES.new(key, AES.MODE_ECB)
+
+    padded = pad_pkcs7(plaintext, AES.block_size)
+
+    offset = 0
+    cipher = b""
+    previous_block = iv
+    for i in range(0, len(padded) // AES.block_size):
+        offset = i * AES.block_size
+        curr_block = padded[offset: offset + AES.block_size]
+        intermediate = encrypt_repeating_key_xor(curr_block, previous_block)
+        cipher += suite.encrypt(intermediate)
+
+        previous_block = curr_block
+
+    return cipher
+
+
+def encrypt_aes_ebc(plaintext: bytes, key: bytes):
+    suite = AES.new(key, AES.MODE_ECB)
+
+    padded = pad_pkcs7(plaintext, AES.block_size)
+
+    return suite.encrypt(padded)
+
+
+def encryption_oracle(input: str):
+    key = secrets.token_bytes(16)
+
+    byte_count = random.randint(5, 10)
+    plaintext = secrets.token_bytes(
+        byte_count) + input.encode() + secrets.token_bytes(byte_count)
+
+    random.seed()
+    mode = random.randint(1, 2)
+
+    cipher = b""
+    if mode == 1:
+        cipher = encrypt_aes_ebc(plaintext, key)
+    else:
+        iv = secrets.token_bytes(AES.block_size)
+        cipher = encrypt_aes_cbc(plaintext, iv, key)
+
+    return cipher
