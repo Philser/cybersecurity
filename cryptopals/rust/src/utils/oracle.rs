@@ -5,6 +5,7 @@ use std::error::Error;
 pub struct Oracle {
     key: Vec<u8>,
     blackbox_plaintext: Vec<u8>,
+    random_prefix: Vec<u8>,
 }
 
 impl Oracle {
@@ -25,11 +26,23 @@ impl Oracle {
         Ok(Oracle {
             key: Oracle::generate_random_byte_vec(16),
             blackbox_plaintext: blackbox_string,
+            random_prefix: Oracle::generate_random_byte_vec_arbitrary_length(),
         })
     }
 
     pub fn blackbox_encrypt_aes_ecb(&self, plaintext: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
         let mut to_encrypt = plaintext.to_vec();
+        to_encrypt.extend(&self.blackbox_plaintext);
+
+        crypto::encrypt_aes_ecb(&to_encrypt, &self.key)
+    }
+
+    pub fn blackbox_encrypt_aes_ecb_random_prefix(
+        &self,
+        plaintext: &[u8],
+    ) -> Result<Vec<u8>, Box<dyn Error>> {
+        let mut to_encrypt = self.random_prefix.to_vec();
+        to_encrypt.extend(plaintext.to_vec());
         to_encrypt.extend(&self.blackbox_plaintext);
 
         crypto::encrypt_aes_ecb(&to_encrypt, &self.key)
@@ -46,6 +59,17 @@ impl Oracle {
     fn generate_random_byte_vec(len: usize) -> Vec<u8> {
         let mut rng = rand::thread_rng();
 
+        (0..len)
+            .map(|_| {
+                let byte: u8 = rng.gen();
+                byte
+            })
+            .collect()
+    }
+
+    fn generate_random_byte_vec_arbitrary_length() -> Vec<u8> {
+        let mut rng = rand::thread_rng();
+        let len: u8 = rng.gen();
         (0..len)
             .map(|_| {
                 let byte: u8 = rng.gen();
