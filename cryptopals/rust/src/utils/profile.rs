@@ -1,4 +1,3 @@
-use crate::utils::oracle::Oracle;
 use std::error::Error;
 pub struct ProfileFactory {
     oracle: Oracle,

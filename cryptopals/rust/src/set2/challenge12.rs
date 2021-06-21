@@ -1,4 +1,4 @@
-use crate::utils::{crack::decipher_oracle_secret, oracle::Oracle};
+use crate::utils::{crack::decipher_oracle_secret};
 use std::error::Error;
 
 pub fn run() -> Result<(), Box<dyn Error>> {
