@@ -1,14 +1,14 @@
 use std::error::Error;
 
-use crate::oracle::{ecb_prefix_oracle::ECBPrefixOracle, oracle::Oracle};
+use crate::oracle::{ecb_oracle::ECBOracle, oracle_trait::Oracle};
 pub struct ProfileFactory {
-    oracle: ECBPrefixOracle,
+    oracle: ECBOracle,
     uid_counter: usize,
 }
 
 impl ProfileFactory {
     pub fn new() -> Result<ProfileFactory, Box<dyn Error>> {
-        let oracle = ECBPrefixOracle::new(Some("".to_owned()))?;
+        let oracle = ECBOracle::new("".to_owned(), false)?;
 
         Ok(ProfileFactory {
             oracle,

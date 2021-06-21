@@ -1,21 +1,19 @@
 use std::error::Error;
 
-use crate::oracle::{ecb_prefix_oracle::ECBPrefixOracle, oracle::Oracle};
+use crate::oracle::{ecb_oracle::ECBOracle, oracle_trait::Oracle};
 
 pub enum AesMode {
     Ecb,
     Cbc 
 }
 
-pub fn decipher_oracle_secret(oracle: &dyn Oracle) -> Result<Vec<u8>, Box<dyn Error>> {
+// TODO: This function ought to be applied to chall 12 & 14! (is this even possible?)
+pub fn decipher_ecb_oracle_secret(oracle: &ECBOracle) -> Result<Vec<u8>, Box<dyn Error>> {
     // 1. Discover block size
     let block_size = discover_block_size(oracle)?;
 
-    let plaintext: Vec<u8> = (0..block_size*4).map(|_| 65/*"A"*/).collect();
-    let cipher = oracle.get_encrypted(&plaintext)?;
-
     // 2. Detect cipher mode
-    match detect_cipher_mode(&plaintext, &cipher, block_size)? {
+    match detect_cipher_mode(oracle, block_size)? {
         AesMode::Ecb => {/*let's continue*/},
         _ => return Err(Box::from("Error: Cipher is not in ECB mode"))
     }
@@ -98,17 +96,11 @@ fn discover_block_size(oracle: &dyn Oracle) -> Result<usize, Box<dyn Error>> {
 }
 
 pub fn detect_cipher_mode(
-    plaintext: &[u8],
-    cipher: &[u8],
+    oracle: &dyn Oracle,
     block_size: usize, 
     ) -> Result<AesMode, Box<dyn Error>> {
-    if plaintext.len() < block_size*3 {
-        return Err(Box::from("Plaintext needs to have a length of at least three times the block size"));
-    }
-
-    if plaintext[block_size..block_size*2] != plaintext[block_size*2 .. block_size*3] {
-        return Err(Box::from("Plaintext needs to be a recurring pattern"));
-    }
+    let plaintext: Vec<u8> = (0..block_size*4).map(|_| 65/*"A"*/).collect();
+    let cipher = oracle.get_encrypted(&plaintext)?;
     
     let pattern = cipher[block_size..block_size*2].to_vec();
     if pattern == cipher[block_size*2..block_size*3] {

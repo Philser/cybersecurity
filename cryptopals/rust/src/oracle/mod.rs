@@ -1,3 +1,3 @@
-pub mod ecb_prefix_oracle;
-pub mod oracle;
+pub mod ecb_oracle;
+pub mod oracle_trait;
 pub mod utils;
