@@ -1,6 +1,7 @@
+mod oracle;
 mod set2;
 mod utils;
-use std::io::{self, Read};
+use std::io::{self};
 
 fn main() {
     let mut input = String::new();

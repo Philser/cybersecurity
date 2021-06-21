@@ -1,17 +1,18 @@
-use crate::utils::oracle::Oracle;
 use std::error::Error;
+
+use crate::oracle::{ecb_prefix_oracle::ECBPrefixOracle, oracle::Oracle};
 
 pub enum AesMode {
     Ecb,
     Cbc 
 }
 
-pub fn decipher_oracle_secret(oracle: &Oracle) -> Result<Vec<u8>, Box<dyn Error>> {
+pub fn decipher_oracle_secret(oracle: &dyn Oracle) -> Result<Vec<u8>, Box<dyn Error>> {
     // 1. Discover block size
-    let block_size = discover_block_size(&oracle)?;
+    let block_size = discover_block_size(oracle)?;
 
     let plaintext: Vec<u8> = (0..block_size*4).map(|_| 65/*"A"*/).collect();
-    let cipher = oracle.blackbox_encrypt_aes_ecb(&plaintext)?;
+    let cipher = oracle.get_encrypted(&plaintext)?;
 
     // 2. Detect cipher mode
     match detect_cipher_mode(&plaintext, &cipher, block_size)? {
@@ -22,7 +23,7 @@ pub fn decipher_oracle_secret(oracle: &Oracle) -> Result<Vec<u8>, Box<dyn Error>
 
     // 3. - 6.
     let mut char_sequence: Vec<u8> = (0..block_size).map(|_| 65/*"A"*/).collect();
-    let pure_cipher = oracle.blackbox_encrypt_aes_ecb(&b"".to_vec())?;
+    let pure_cipher = oracle.get_encrypted(&b"".to_vec())?;
     let mut plaintext = b"".to_vec();
     for curr_block in 0..(pure_cipher.len() / block_size) {        
         let offset = curr_block * block_size;
@@ -34,7 +35,7 @@ pub fn decipher_oracle_secret(oracle: &Oracle) -> Result<Vec<u8>, Box<dyn Error>
             if !char_sequence.is_empty() {
                 char_sequence.remove(0); // Left shift by one at a time
             }
-            let cipher = oracle.blackbox_encrypt_aes_ecb(&char_sequence)?;
+            let cipher = oracle.get_encrypted(&char_sequence)?;
 
             let mut guess = char_sequence.clone();
             guess.extend(&secret);
@@ -47,7 +48,7 @@ pub fn decipher_oracle_secret(oracle: &Oracle) -> Result<Vec<u8>, Box<dyn Error>
             match bruteforce_aes_ebc_byte(
                 &guess, 
                 &cipher[offset..offset + block_size], 
-                &oracle,
+                oracle,
             ) {
                 Ok(character) => secret.push(character),
                 Err(_) => {
@@ -67,9 +68,9 @@ pub fn decipher_oracle_secret(oracle: &Oracle) -> Result<Vec<u8>, Box<dyn Error>
     Ok(plaintext)
 }
 
-fn discover_block_size(oracle: &Oracle) -> Result<usize, Box<dyn Error>> {
+fn discover_block_size(oracle: &dyn Oracle) -> Result<usize, Box<dyn Error>> {
     let mut plaintext = b"A".to_vec();
-    let mut cipher = oracle.blackbox_encrypt_aes_ecb(&plaintext)?;
+    let mut cipher = oracle.get_encrypted(&plaintext)?;
     let mut last_cipher_len = cipher.len();
     let mut init_run = true;
     let mut padding_until_next_block = 0;
@@ -80,7 +81,7 @@ fn discover_block_size(oracle: &Oracle) -> Result<usize, Box<dyn Error>> {
     // characters being added to the cipher.
     loop {
         plaintext.extend(b"A".to_vec());
-        cipher = oracle.blackbox_encrypt_aes_ecb(&plaintext)?;
+        cipher = oracle.get_encrypted(&plaintext)?;
         if cipher.len() > last_cipher_len {
             if init_run {
                 init_run = false;
@@ -120,7 +121,7 @@ pub fn detect_cipher_mode(
 fn bruteforce_aes_ebc_byte(
     plaintext: &[u8], 
     cipher_block: &[u8], 
-    oracle: &Oracle, 
+    oracle: &dyn Oracle, 
 ) -> Result<u8, Box<dyn Error>> {
     let mut printable_chars = 
         b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890!$%&/()=?*',.-;:_ +\n\t~#<>|\\".to_vec();  
@@ -132,7 +133,7 @@ fn bruteforce_aes_ebc_byte(
         let mut guess = plaintext.to_vec();
         guess.push(*letter);
     
-        if &oracle.blackbox_encrypt_aes_ecb(&guess)?[0..cipher_block.len()] == cipher_block {
+        if &oracle.get_encrypted(&guess)?[0..cipher_block.len()] == cipher_block {
             return Ok(*letter);
         }
     }
