@@ -1,6 +1,7 @@
+mod oracle;
 mod set2;
 mod utils;
-use std::io::{self, Read};
+use std::io::{self};
 
 fn main() {
     let mut input = String::new();
@@ -30,6 +31,7 @@ fn main() {
             "11" => set2::challenge11::run().unwrap(),
             "12" => set2::challenge12::run().unwrap(),
             "13" => set2::challenge13::run().unwrap(),
+            "14" => set2::challenge14::run().unwrap(),
             "q" => {
                 println!("Goodbye");
                 break;

@@ -1,13 +1,14 @@
-use crate::utils::oracle::Oracle;
 use std::error::Error;
+
+use crate::oracle::{ecb_oracle::ECBOracle, oracle_trait::Oracle};
 pub struct ProfileFactory {
-    oracle: Oracle,
+    oracle: ECBOracle,
     uid_counter: usize,
 }
 
 impl ProfileFactory {
     pub fn new() -> Result<ProfileFactory, Box<dyn Error>> {
-        let oracle = Oracle::new(Some("".to_owned()))?;
+        let oracle = ECBOracle::new("".to_owned(), false)?;
 
         Ok(ProfileFactory {
             oracle,
@@ -26,11 +27,12 @@ impl ProfileFactory {
         );
         self.uid_counter += 1;
 
-        let encrypted = &self.oracle.blackbox_encrypt_aes_ecb(profile.as_bytes())?;
+        let encrypted = &self.oracle.get_encrypted(profile.as_bytes())?;
 
         Ok(hex::encode(encrypted))
     }
 
+    #[cfg(test)]
     fn profile_for_admin(&mut self, email: &str) -> Result<String, Box<dyn Error>> {
         let mut sanitized_email = email.to_owned();
         sanitized_email = sanitized_email.replace("&", "");
@@ -43,7 +45,7 @@ impl ProfileFactory {
 
         self.uid_counter += 1;
 
-        let encrypted = &self.oracle.blackbox_encrypt_aes_ecb(profile.as_bytes())?;
+        let encrypted = &self.oracle.get_encrypted(profile.as_bytes())?;
 
         Ok(hex::encode(encrypted))
     }
