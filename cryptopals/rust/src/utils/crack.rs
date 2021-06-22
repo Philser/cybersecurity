@@ -18,6 +18,16 @@ pub fn decipher_ecb_oracle_secret(oracle: &ECBOracle) -> Result<Vec<u8>, Box<dyn
         _ => return Err(Box::from("Error: Cipher is not in ECB mode"))
     }
 
+    // Bonus: Detect and evade prefix
+    // B.1: Set a "prefix length" value to 0
+    // B.2: Insert recurring pattern and look for repeating blocks at start of array
+    // B.3.1: If recurring pattern was found BUT not of original length, increase "prefix length"
+    // B.3.2: If recurring pattern of right length was found, "prefix length" is the right value
+    //        and we memorize at which position the recurring pattern was found
+    // B.4: For attacking the cipher, we now always insert "prefix length" and drop the first
+    //      blocks that we know only hold the random prefix
+    let (a, b) = get_prefix_counter_measures(oracle, block_size)?;
+
 
     // 3. - 6.
     let mut char_sequence: Vec<u8> = (0..block_size).map(|_| 65/*"A"*/).collect();
@@ -135,3 +145,71 @@ fn bruteforce_aes_ebc_byte(
             format!("Could not bruteforce character. Plaintext: {}", String::from_utf8(plaintext.to_vec())?)
         ))
 }
+
+/// Returns a tuple of (prefix_length, pos) where **prefix_length** is the number of chars
+/// required to be inserted into oracle input so that **pos** is the block where the actual
+/// input starts, with an oracle's inserted prefix being in the blocks before **pos**.
+fn get_prefix_counter_measures(
+    oracle: &dyn Oracle, 
+    block_size: usize
+) -> Result<(usize, usize), Box<dyn Error>> {
+    let pattern_count = 4;
+    
+    let mut prefix_length = 0;
+    let pattern: Vec<u8> = (0..block_size * pattern_count).map(|_| 41).collect();
+
+    // TODO: Find prefix_length by observing block count
+    
+    while prefix_length < block_size - 1 {
+        let mut input = (0..prefix_length).map(|_| 0).collect::<Vec<u8>>();
+        input.extend(&pattern);
+
+        let cipher = oracle.get_encrypted(&input)?;
+        
+        // Check if blocks at pos..pos + pattern_count are all equal
+        let blocks = cipher.len() / block_size;
+        for pos in 0..=blocks - pattern_count {
+            let mut blocks_are_equal = true;
+            let curr_slice = &cipher[pos * block_size .. pos * block_size + block_size];
+            
+            for i in pos + 1..pos + pattern_count {
+                let next_slice = &cipher[i * block_size .. i * block_size + block_size];
+                
+                blocks_are_equal = *curr_slice == *next_slice;
+            }
+
+            if blocks_are_equal {
+                return Ok((prefix_length, pos));
+            }
+        }
+
+        prefix_length += 1;
+    }
+
+    Ok((0, 0))
+}
+
+#[test]
+fn can_get_prefix_counter_measures() -> Result<(), Box<dyn Error>> {
+    struct DummyOracle {}
+    impl Oracle for DummyOracle {
+        fn get_encrypted(&self, plaintext: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+            // One and a half block sizes of prefix
+            let mut cipher: Vec<u8> = (0..24).map(|_| 50).collect(); 
+            cipher.extend(plaintext.to_vec());
+
+            Ok(cipher)
+        }
+    }
+
+    let dummy = DummyOracle{};
+    let (prefix_len, pos) = get_prefix_counter_measures(&dummy, 16)?;
+
+    assert_eq!(8, prefix_len);
+    assert_eq!(2, pos);
+
+    Ok(())
+}
+
+
+// TODO: Tests
