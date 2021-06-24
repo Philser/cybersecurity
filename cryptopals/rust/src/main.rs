@@ -14,6 +14,7 @@ fn main() {
         (11) - An ECB/CBC Detection Oracle
         (12) - Byte-at-a-time ECB decryption (Simple)
         (13) - ECB cut-and-paste
+        (14) - Byte-at-a-time ECB decryption (Harder)
         (q)  - Quit
     "###
         );

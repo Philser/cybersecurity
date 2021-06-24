@@ -7,7 +7,7 @@ pub enum AesMode {
     Cbc 
 }
 
-// TODO: This function ought to be applied to chall 12 & 14! (is this even possible?)
+// TODO: This function is a mess
 pub fn decipher_ecb_oracle_secret(oracle: &ECBOracle) -> Result<Vec<u8>, Box<dyn Error>> {
     // 1. Discover block size
     let block_size = discover_block_size(oracle)?;
@@ -26,14 +26,14 @@ pub fn decipher_ecb_oracle_secret(oracle: &ECBOracle) -> Result<Vec<u8>, Box<dyn
     //        and we memorize at which position the recurring pattern was found
     // B.4: For attacking the cipher, we now always insert "prefix length" and drop the first
     //      blocks that we know only hold the random prefix
-    let (a, b) = get_prefix_counter_measures(oracle, block_size)?;
-
+    let (prefix_length, cipher_start_block) = get_ecb_prefix_counter_measures(oracle, block_size)?;
 
     // 3. - 6.
+    let prefix: Vec<u8> = (0..prefix_length).map(|_| 0).collect();
     let mut char_sequence: Vec<u8> = (0..block_size).map(|_| 65/*"A"*/).collect();
-    let pure_cipher = oracle.get_encrypted(&b"".to_vec())?;
+    let pure_cipher = oracle.get_encrypted(&prefix)?;
     let mut plaintext = b"".to_vec();
-    for curr_block in 0..(pure_cipher.len() / block_size) {        
+    for curr_block in cipher_start_block..(pure_cipher.len() / block_size) {    
         let offset = curr_block * block_size;
         let mut secret = b"".to_vec();
         
@@ -43,20 +43,21 @@ pub fn decipher_ecb_oracle_secret(oracle: &ECBOracle) -> Result<Vec<u8>, Box<dyn
             if !char_sequence.is_empty() {
                 char_sequence.remove(0); // Left shift by one at a time
             }
-            let cipher = oracle.get_encrypted(&char_sequence)?;
 
-            let mut guess = char_sequence.clone();
+            let mut input = prefix.clone();
+            input.extend(&char_sequence);
+            let cipher = oracle.get_encrypted(&input)?;
+
+            let mut guess = input.clone();
             guess.extend(&secret);
-
-            if plaintext.len() + secret.len() == pure_cipher.len() {
-                return Ok(plaintext);
-            }
 
             // 4.-5. Brute force next byte by trying every possible byte and look for match
             match bruteforce_aes_ebc_byte(
                 &guess, 
                 &cipher[offset..offset + block_size], 
+                cipher_start_block,
                 oracle,
+                
             ) {
                 Ok(character) => secret.push(character),
                 Err(_) => {
@@ -109,11 +110,7 @@ pub fn detect_cipher_mode(
     oracle: &dyn Oracle,
     block_size: usize, 
     ) -> Result<AesMode, Box<dyn Error>> {
-    let plaintext: Vec<u8> = (0..block_size*4).map(|_| 65/*"A"*/).collect();
-    let cipher = oracle.get_encrypted(&plaintext)?;
-    
-    let pattern = cipher[block_size..block_size*2].to_vec();
-    if pattern == cipher[block_size*2..block_size*3] {
+    if get_ecb_prefix_counter_measures(oracle, block_size).is_ok() {
         return Ok(AesMode::Ecb);
     }
 
@@ -123,6 +120,7 @@ pub fn detect_cipher_mode(
 fn bruteforce_aes_ebc_byte(
     plaintext: &[u8], 
     cipher_block: &[u8], 
+    cipher_start_block: usize,
     oracle: &dyn Oracle, 
 ) -> Result<u8, Box<dyn Error>> {
     let mut printable_chars = 
@@ -130,12 +128,15 @@ fn bruteforce_aes_ebc_byte(
     
     let paddings: Vec<u8> = (1..cipher_block.len()).map(|i| i as u8).collect();
     printable_chars.extend(paddings);
+
+    let offset = cipher_start_block * cipher_block.len();
        
     for letter in printable_chars.iter() {
         let mut guess = plaintext.to_vec();
         guess.push(*letter);
     
-        if &oracle.get_encrypted(&guess)?[0..cipher_block.len()] == cipher_block {
+        
+        if &oracle.get_encrypted(&guess)?[offset..offset + cipher_block.len()] == cipher_block {
             return Ok(*letter);
         }
     }
@@ -146,10 +147,7 @@ fn bruteforce_aes_ebc_byte(
         ))
 }
 
-/// Returns a tuple of (prefix_length, pos) where **prefix_length** is the number of chars
-/// required to be inserted into oracle input so that **pos** is the block where the actual
-/// input starts, with an oracle's inserted prefix being in the blocks before **pos**.
-fn get_prefix_counter_measures(
+fn get_ecb_prefix_counter_measures(
     oracle: &dyn Oracle, 
     block_size: usize
 ) -> Result<(usize, usize), Box<dyn Error>> {
@@ -158,9 +156,8 @@ fn get_prefix_counter_measures(
     let mut prefix_length = 0;
     let pattern: Vec<u8> = (0..block_size * pattern_count).map(|_| 41).collect();
 
-    // TODO: Find prefix_length by observing block count
-    
-    while prefix_length < block_size - 1 {
+    // Find prefix_length by inserting recurring pattern
+    while prefix_length < block_size  {
         let mut input = (0..prefix_length).map(|_| 0).collect::<Vec<u8>>();
         input.extend(&pattern);
 
@@ -186,7 +183,7 @@ fn get_prefix_counter_measures(
         prefix_length += 1;
     }
 
-    Ok((0, 0))
+    Err(Box::from("Cipher is not encrypted in AES ECB Mode"))
 }
 
 #[test]
@@ -203,10 +200,34 @@ fn can_get_prefix_counter_measures() -> Result<(), Box<dyn Error>> {
     }
 
     let dummy = DummyOracle{};
-    let (prefix_len, pos) = get_prefix_counter_measures(&dummy, 16)?;
-
+    let (prefix_len, pos) = get_ecb_prefix_counter_measures(
+        &dummy, 
+        16
+    )?;
     assert_eq!(8, prefix_len);
     assert_eq!(2, pos);
+    
+    Ok(())
+}
+
+#[test]
+fn can_get_prefix_counter_measures_no_prefix() -> Result<(), Box<dyn Error>> {
+    struct DummyOracle {}
+    impl Oracle for DummyOracle {
+        fn get_encrypted(&self, plaintext: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+            // One and a half block sizes of prefix
+            let mut cipher: Vec<u8> = Vec::new();
+            cipher.extend(plaintext.to_vec());
+
+            Ok(cipher)
+        }
+    }
+
+    let dummy = DummyOracle{};
+    
+    let (prefix_len, pos) = get_ecb_prefix_counter_measures(&dummy, 16)?;
+    assert_eq!(0, prefix_len);
+    assert_eq!(0, pos);
 
     Ok(())
 }
